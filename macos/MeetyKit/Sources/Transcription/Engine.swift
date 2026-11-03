@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// One piece of transcript, times in seconds from the start of the samples passed in.
@@ -26,4 +27,22 @@ public enum ModelStatus: Sendable, Hashable {
     case missing
     case downloading(Double)
     case available
+}
+
+/// Which engine transcribes, from the language preference and the `transcript_settings` row.
+public enum EngineChoice: Sendable, Hashable {
+    case parakeet(ParakeetModel)
+    /// Whisper language code; nil detects it.
+    case whisper(WhisperModel, language: String?)
+
+    /// "en" → Parakeet (the configured Parakeet model, else Ultra); "auto" → the configured provider,
+    /// Whisper detecting the language; any other code (tl, …) → Whisper in that language.
+    public static func route(language: String, config: TranscriptConfig?) -> EngineChoice {
+        let parakeet = ParakeetModel(rawValue: config?.provider == "parakeet" ? config?.model ?? "" : "") ?? .default
+        switch language {
+        case "en": return .parakeet(parakeet)
+        case "auto": return config?.provider == "localWhisper" ? .whisper(.turbo, language: nil) : .parakeet(parakeet)
+        default: return .whisper(.turbo, language: language)
+        }
+    }
 }

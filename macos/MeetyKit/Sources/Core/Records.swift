@@ -99,6 +99,12 @@ public struct TranscriptConfig: Codable, Sendable, Hashable, FetchableRecord {
     public var id: String
     public var provider: String
     public var model: String
+
+    public init(id: String = "1", provider: String, model: String) {
+        self.id = id
+        self.provider = provider
+        self.model = model
+    }
 }
 
 public struct SearchResult: Sendable, Hashable {
