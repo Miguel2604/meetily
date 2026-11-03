@@ -90,14 +90,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Quit Meety (menu, status item, Dock, logout). AppKit refuses `terminate:` while a sheet is attached, so sheets
-    /// end first; a recording in progress is saved first (in `terminateLater` the main actor never ran the save).
+    /// end first; pending edits and a recording in progress are saved first (in `terminateLater` the main actor never
+    /// ran the save). If the recording can't be saved, quitting stops so the error stays on screen.
     @objc func quit(_ sender: Any?) {
         guard !quitting else { return }
         quitting = true
         for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
         Task {
+            await mainWindow?.flushEdits()
             if let recorder = model?.recorder {
-                _ = await recorder.stop()
+                let live = recorder.phase == .recording || recorder.phase == .paused
+                if live, await recorder.stop() == nil {
+                    quitting = false
+                    model?.route = .home // the recording screen shows the failure
+                    showMainWindow(nil)
+                    return
+                }
                 while recorder.phase == .stopping { try? await Task.sleep(for: .milliseconds(100)) } // a stop already running
             }
             NSApp.terminate(sender)

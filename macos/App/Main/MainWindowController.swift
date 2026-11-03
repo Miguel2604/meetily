@@ -6,16 +6,18 @@ import UniformTypeIdentifiers
 final class MainWindowController: NSWindowController, NSMenuItemValidation {
     private let model: AppModel
     private let sidebar: SidebarViewController
+    private let router: ContentRouter
 
     init(model: AppModel) {
         self.model = model
         sidebar = SidebarViewController(model: model)
+        router = ContentRouter(model: model)
         let split = NSSplitViewController()
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
         sidebarItem.minimumThickness = 220
         sidebarItem.maximumThickness = 360
         split.addSplitViewItem(sidebarItem)
-        split.addSplitViewItem(NSSplitViewItem(viewController: ContentRouter(model: model)))
+        split.addSplitViewItem(NSSplitViewItem(viewController: router))
         split.splitView.autosaveName = "MainSplit"
 
         let window = NSWindow(contentViewController: split)
@@ -40,6 +42,11 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
     @objc func newRecording(_ sender: Any?) {
         model.route = .home
         Task { await model.startRecording() }
+    }
+
+    /// Saves the open meeting's pending summary and notes edits.
+    func flushEdits() async {
+        await (router.children.first as? MeetingViewController)?.flushEdits()
     }
 
     @objc func stopRecording(_ sender: Any?) { Task { await model.stopRecording() } }

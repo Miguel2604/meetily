@@ -53,6 +53,18 @@ import Testing
         #expect(reloaded.markdown == "## Points\n- Ship **Friday**")
     }
 
+    @Test func `typing during a save keeps the newer text dirty`() async throws {
+        let summary = controller()
+        await summary.generate(provider: "openai", model: "m", templateID: "standard_meeting", language: "en")
+        summary.markdown = "## Points\n- One"
+        let save = Task { try await summary.save() }
+        await Task.yield() // the save is now waiting on the database
+        summary.markdown = "## Points\n- One\n- Two"
+        try await save.value
+        #expect(summary.isDirty)
+        #expect(summary.savedMarkdown == "## Points\n- One")
+    }
+
     @Test func `cancelling a regeneration keeps the previous summary`() async throws {
         let summary = controller()
         await summary.generate(provider: "openai", model: "m", templateID: "standard_meeting", language: "en")

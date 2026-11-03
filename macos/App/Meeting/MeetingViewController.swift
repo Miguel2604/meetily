@@ -43,6 +43,8 @@ final class MeetingViewController: NSSplitViewController {
         message: "Generate an AI-powered summary of your meeting transcript to get key points, action items, and decisions.",
         action: ("Generate Summary", "sparkles", self, #selector(generate)))
     private var notesSave: Task<Void, Never>?
+    /// Set by typing only, so leaving before the notes load never writes the empty editor over them.
+    private var notesEdited = false
     private var templates: [(id: String, name: String, description: String)] = []
     private var modelChoices: [(provider: String, model: String)] = []
 
@@ -71,8 +73,7 @@ final class MeetingViewController: NSSplitViewController {
     override func viewWillDisappear() {
         super.viewWillDisappear()
         audioBar?.stop()
-        if summary.isDirty { Task { [summary] in try? await summary.save() } }
-        flushNotes()
+        Task { await flushEdits() }
     }
 
     // MARK: Build
@@ -131,7 +132,10 @@ final class MeetingViewController: NSSplitViewController {
         writing.orientation = .vertical
 
         summaryEditor.onChange = { [weak self] text in self?.summary.markdown = text }
-        notesEditor.onChange = { [weak self] _ in self?.scheduleNotesSave() }
+        notesEditor.onChange = { [weak self] _ in
+            self?.notesEdited = true
+            self?.scheduleNotesSave()
+        }
         notesEditor.isHidden = true
         errorLabel.isHidden = true
 
@@ -354,19 +358,22 @@ final class MeetingViewController: NSSplitViewController {
         notesSave = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
-            self?.flushNotes()
+            await self?.saveNotes()
         }
     }
 
-    private func flushNotes() {
+    private func saveNotes() async {
         notesSave?.cancel()
         notesSave = nil
-        let markdown = notesEditor.markdown
-        Task { [model, meetingID] in
-            if (try? await model.store.notes(meetingID: meetingID)) ?? "" != markdown {
-                do { try await model.store.saveNotes(meetingID: meetingID, markdown: markdown) } catch { model.present(error) }
-            }
-        }
+        guard notesEdited else { return }
+        notesEdited = false
+        do { try await model.store.saveNotes(meetingID: meetingID, markdown: notesEditor.markdown) } catch { model.present(error) }
+    }
+
+    /// Saves pending summary and notes edits (leaving the meeting, quitting).
+    func flushEdits() async {
+        if summary.isDirty { try? await summary.save() }
+        await saveNotes()
     }
 }
 

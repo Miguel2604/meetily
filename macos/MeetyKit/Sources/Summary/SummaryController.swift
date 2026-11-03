@@ -75,13 +75,14 @@ public final class SummaryController {
 
     /// Stores the editor's markdown, keeping the run's other fields (english cache, metadata).
     public func save() async throws {
+        let snapshot = markdown // edits made while the save is in flight stay dirty
         var summary = data
-        summary["markdown"] = markdown
+        summary["markdown"] = snapshot
         summary["summary_json"] = nil
         nonisolated(unsafe) let payload = summary // a fresh copy the service only reads
         try await service.save(meetingID: meetingID, summary: payload)
         data = summary
-        savedMarkdown = markdown
+        savedMarkdown = snapshot
     }
 
     private func isRunning(_ state: SummaryState) -> Bool { state.status == "pending" || state.status == "processing" }
