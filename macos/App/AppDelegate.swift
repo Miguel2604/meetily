@@ -10,11 +10,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = "Meety"
+        window.contentView = EmptyStateView(symbol: "waveform", title: "Welcome to Meety", message: "Record a meeting to see its live transcript here.")
         window.minSize = NSSize(width: 760, height: 480)
         window.setFrameAutosaveName("MainWindow")
         if !window.setFrameUsingName("MainWindow") { window.center() }
         window.makeKeyAndOrderFront(nil)
         self.window = window
+        #if DEBUG
+        DebugSnapshot.scheduleIfRequested(window)
+        #endif
         NSApp.activate()
     }
 
