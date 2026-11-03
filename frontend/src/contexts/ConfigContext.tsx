@@ -374,6 +374,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'],
     openrouter: [],
     openai: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'],
+    chatgpt: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'],
     'builtin-ai': [],
     'custom-openai': [],
   };

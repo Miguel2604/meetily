@@ -220,6 +220,8 @@ pub enum LLMProvider {
     OpenRouter,
     BuiltInAI,
     CustomOpenAI,
+    /// ChatGPT subscription through the Codex CLI (`codex login`), no API key.
+    ChatGPT,
 }
 
 impl LLMProvider {
@@ -233,6 +235,7 @@ impl LLMProvider {
             "openrouter" => Ok(Self::OpenRouter),
             "builtin-ai" | "local-llama" | "localllama" => Ok(Self::BuiltInAI),
             "custom-openai" => Ok(Self::CustomOpenAI),
+            "chatgpt" => Ok(Self::ChatGPT),
             _ => Err(format!("Unsupported LLM provider: {}", s)),
         }
     }
@@ -298,6 +301,14 @@ pub(crate) async fn generate_summary(
         .map_err(|e| e.to_string());
     }
 
+    if provider == &LLMProvider::ChatGPT {
+        let codex = find_codex().ok_or(
+            "Codex CLI not found. Install it and run `codex login` to use your ChatGPT subscription.",
+        )?;
+        return generate_with_codex(&codex, model_name, system_prompt, user_prompt, cancellation_token)
+            .await;
+    }
+
     let (api_url, mut headers) = match provider {
         LLMProvider::OpenAI => (
             "https://api.openai.com/v1/chat/completions".to_string(),
@@ -344,9 +355,9 @@ pub(crate) async fn generate_summary(
             );
             ("https://api.anthropic.com/v1/messages".to_string(), header_map)
         }
-        LLMProvider::BuiltInAI => {
-            // This case is handled earlier with early returns
-            unreachable!("BuiltInAI is handled before this match statement")
+        LLMProvider::BuiltInAI | LLMProvider::ChatGPT => {
+            // These cases are handled earlier with early returns
+            unreachable!("BuiltInAI and ChatGPT are handled before this match statement")
         }
     };
 
@@ -510,6 +521,89 @@ pub(crate) async fn generate_summary(
         info!("🐞 LLM Response received from {}", provider_name(provider));
         chat_response.completion()
     }
+}
+
+/// GUI launches on macOS get a minimal PATH, so also check common install dirs.
+fn find_codex() -> Option<PathBuf> {
+    which::which("codex").ok().or_else(|| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let dirs = format!(
+            "{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:{home}/.npm-global/bin:{home}/.bun/bin"
+        );
+        which::which_in("codex", Some(dirs), "/").ok()
+    })
+}
+
+/// Runs one prompt through `codex exec`, which bills the user's ChatGPT plan.
+async fn generate_with_codex(
+    codex: &std::path::Path,
+    model_name: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+    cancellation_token: Option<&CancellationToken>,
+) -> Result<LlmCompletion, String> {
+    use tokio::io::AsyncWriteExt;
+
+    // Empty working dir + read-only sandbox: the agent has nothing to touch.
+    let work_dir = tempfile::tempdir().map_err(|e| format!("Failed to create Codex work dir: {e}"))?;
+    let output_path = work_dir.path().join("summary.md");
+    let prompt = format!(
+        "Answer directly with the requested output only. Do not run commands or edit files.\n\n\
+         # Instructions\n{system_prompt}\n\n# Input\n{user_prompt}"
+    );
+
+    info!("🐞 LLM Request to ChatGPT via Codex CLI: model={}", model_name);
+    let run = async {
+        let mut child = tokio::process::Command::new(codex)
+            .args(["exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config"])
+            .args(["--ignore-rules", "-s", "read-only", "--color", "never", "-m", model_name, "-C"])
+            .arg(work_dir.path())
+            .arg("-o")
+            .arg(&output_path)
+            .arg("-")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| format!("Failed to start Codex CLI: {e}"))?;
+        let mut stdin = child.stdin.take().ok_or("Failed to open Codex stdin")?;
+        stdin
+            .write_all(prompt.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to send prompt to Codex CLI: {e}"))?;
+        drop(stdin);
+        child
+            .wait_with_output()
+            .await
+            .map_err(|e| format!("Codex CLI failed: {e}"))
+    };
+    let output = await_or_cancel(tokio::time::timeout(REQUEST_TIMEOUT_DURATION, run), cancellation_token)
+        .await?
+        .map_err(|_| {
+            format!(
+                "LLM request timed out after {} seconds",
+                REQUEST_TIMEOUT_DURATION.as_secs()
+            )
+        })??;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Only the last lines: earlier stderr echoes the whole prompt (the transcript).
+        let lines: Vec<&str> = stderr.trim().lines().collect();
+        let tail = lines[lines.len().saturating_sub(5)..].join("\n");
+        return Err(format!(
+            "Codex CLI exited with {}. Run `codex login` if you are signed out. {}",
+            output.status, tail
+        ));
+    }
+    let content = std::fs::read_to_string(&output_path)
+        .map_err(|e| format!("Codex CLI returned no answer: {e}"))?;
+    info!("🐞 LLM Response received from ChatGPT");
+    Ok(LlmCompletion {
+        content: content.trim().to_string(),
+        reasoning_stripped: false,
+    })
 }
 
 #[cfg(test)]
@@ -892,6 +986,29 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn codex_bridge_sends_prompt_on_stdin_and_reads_last_message() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let stub = dir.path().join("codex");
+        // Echoes stdin into the -o file; exits 3 when the model is "fail".
+        std::fs::write(
+            &stub,
+            "#!/bin/sh\ncase \"$*\" in *' -m fail '*) echo 'not logged in' >&2; exit 3;; esac\n\
+             while [ \"$1\" != \"-o\" ]; do shift; done\ncat > \"$2\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let completion = generate_with_codex(&stub, "m", "SYS", "USER", None).await.unwrap();
+        assert!(completion.content.contains("# Instructions\nSYS"));
+        assert!(completion.content.ends_with("# Input\nUSER"));
+
+        let error = generate_with_codex(&stub, "fail", "SYS", "USER", None).await.unwrap_err();
+        assert!(error.contains("not logged in"), "{error}");
+    }
+
     #[test]
     fn claude_response_uses_exact_block_types() {
         let response: ClaudeChatResponse = serde_json::from_value(json!({
@@ -922,6 +1039,7 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::BuiltInAI => "Built-in AI",
         LLMProvider::OpenRouter => "OpenRouter",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
+        LLMProvider::ChatGPT => "ChatGPT",
     }
 }
 
