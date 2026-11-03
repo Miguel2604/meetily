@@ -15,7 +15,7 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2"),
     ],
     targets: [
-        .target(name: "Core", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "Core", dependencies: [.product(name: "GRDB", package: "GRDB.swift")], resources: [.copy("Resources/migrations")]),
         .target(name: "Audio", dependencies: ["Core"]),
         .target(name: "Transcription", dependencies: ["Core", "Audio", .product(name: "FluidAudio", package: "FluidAudio")]),
         .target(name: "Summary", dependencies: ["Core"]),
