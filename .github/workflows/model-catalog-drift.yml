@@ -1,0 +1,48 @@
+name: "Model Catalog Drift"
+
+# Weekly check that the built-in Whisper, Parakeet and Built-in AI catalogs still
+# match upstream. Opens (or updates) one issue when there is something to act on.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check catalogs against Hugging Face
+        id: check
+        run: |
+          set +e
+          node scripts/check-model-catalog.mjs --days 8 > report.md
+          echo "drift=$?" >> "$GITHUB_OUTPUT"
+          cat report.md
+
+      - name: Open or update drift issue
+        if: steps.check.outputs.drift == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Model catalog drift"
+          NUMBER=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
+          if [ -n "$NUMBER" ]; then
+            gh issue comment "$NUMBER" --body-file report.md
+          else
+            gh issue create --title "$TITLE" --body-file report.md
+          fi
+
+      - name: Fail on script errors
+        if: steps.check.outputs.drift != '0' && steps.check.outputs.drift != '1'
+        run: exit 1
