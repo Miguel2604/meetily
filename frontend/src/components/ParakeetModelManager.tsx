@@ -34,6 +34,7 @@ export function ParakeetModelManager({
   const [listenersReady, setListenersReady] = useState(false);
   const [downloadingModels, setDownloadingModels] = useState<Set<string>>(new Set());
   const [cancellingModels, setCancellingModels] = useState<Set<string>>(new Set());
+  const [preparingModel, setPreparingModel] = useState<string | null>(null);
 
   // Refs for stable callbacks
   const onModelSelectRef = useRef(onModelSelect);
@@ -343,9 +344,34 @@ export function ParakeetModelManager({
 
     const displayInfo = getModelDisplayInfo(modelName);
     const displayName = displayInfo?.friendlyName || modelName;
-    toast.success(`Switched to ${displayName}`, {
-      duration: 3000
+
+    // Swapping the loaded model mid-meeting would change engines halfway through the transcript.
+    if (await invoke<boolean>('is_recording').catch(() => true)) {
+      toast.success(`Switched to ${displayName}`, {
+        description: 'It takes effect from your next recording',
+        duration: 3000
+      });
+      return;
+    }
+
+    // Load now: a model's first load compiles it for the Neural Engine, which can take minutes,
+    // and would otherwise happen behind the record button.
+    setPreparingModel(modelName);
+    const toastId = toast.loading(`Preparing ${displayName}…`, {
+      description: 'The first time, this can take a few minutes'
     });
+    try {
+      await ParakeetAPI.loadModel(modelName);
+      toast.success(`${displayName} is ready`, { id: toastId, description: undefined, duration: 3000 });
+    } catch (err) {
+      toast.error(`Couldn't prepare ${displayName}`, {
+        id: toastId,
+        description: err instanceof Error ? err.message : String(err),
+        duration: 6000
+      });
+    } finally {
+      setPreparingModel(current => (current === modelName ? null : current));
+    }
   };
 
   const deleteModel = async (modelName: string) => {
@@ -452,7 +478,9 @@ export function ParakeetModelManager({
           animate={{ opacity: 1, y: 0 }}
           className="text-xs text-gray-500 text-center pt-2"
         >
-          Using {getModelDisplayName(selectedModel)} for transcription
+          {preparingModel === selectedModel
+            ? `Preparing ${getModelDisplayName(selectedModel)} for the Neural Engine…`
+            : `Using ${getModelDisplayName(selectedModel)} for transcription`}
         </motion.div>
       )}
     </div>

@@ -236,15 +236,7 @@ pub async fn parakeet_validate_model_ready_with_config<R: tauri::Runtime>(
     };
 
     if let Some(engine) = engine {
-        // Check if a model is currently loaded
-        if engine.is_model_loaded().await {
-            if let Some(current_model) = engine.get_current_model().await {
-                log::info!("Parakeet model already loaded: {}", current_model);
-                return Ok(current_model);
-            }
-        }
-
-        // No model loaded - try to load user's configured model from transcript config
+        // Load the user's configured model from transcript config
         let model_to_load = match crate::api::api::api_get_transcript_config(
             app.clone(),
             app.state(),
@@ -281,6 +273,14 @@ pub async fn parakeet_validate_model_ready_with_config<R: tauri::Runtime>(
                 None
             }
         };
+
+        // Keep the loaded model unless the user has since configured a different one.
+        if let Some(current_model) = engine.get_current_model().await {
+            if model_to_load.as_ref().map_or(true, |m| *m == current_model) {
+                log::info!("Parakeet model already loaded: {}", current_model);
+                return Ok(current_model);
+            }
+        }
 
         // Check available models
         let models = engine
