@@ -96,7 +96,7 @@ public enum OfflineTranscription {
         let id = try await store.saveMeeting(title: title, segments: segments, folderPath: folder.path)
         try writeTranscripts(segments, to: folder)
         let now = Timestamp.now()
-        try writeMetadata(in: folder) { _ in [
+        try MeetingMetadata.update(in: folder) { _ in [
             "version": "1.0", "meeting_id": id, "meeting_name": title, "created_at": now, "completed_at": now,
             "duration_seconds": duration, "audio_file": audioFile, "transcript_file": "transcripts.json",
             "status": "completed", "source": "import",
@@ -122,7 +122,7 @@ public enum OfflineTranscription {
         let folder = audio.deletingLastPathComponent()
         try writeTranscripts(segments, to: folder)
         let now = Timestamp.now()
-        try writeMetadata(in: folder) { existing in
+        try MeetingMetadata.update(in: folder) { existing in
             var metadata = existing ?? [
                 "version": "1.0", "meeting_id": meetingID, "created_at": now, "completed_at": now,
                 "audio_file": audio.lastPathComponent, "source": "retranscription",
@@ -137,7 +137,7 @@ public enum OfflineTranscription {
     }
 
     /// The recording in a meeting folder, by the names the Tauri app used, then any decodable file.
-    static func findAudio(in folder: URL) -> URL? {
+    public static func findAudio(in folder: URL) -> URL? {
         let names = ["audio.mp4", "audio.m4a", "audio.wav", "audio.mp3", "audio.flac", "recording.mp4"]
         if let name = names.first(where: { FileManager.default.fileExists(atPath: folder.appending(path: $0).path) }) {
             return folder.appending(path: name)
@@ -187,11 +187,5 @@ public enum OfflineTranscription {
         ]
         try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
             .write(to: folder.appending(path: "transcripts.json"), options: .atomic)
-    }
-
-    static func writeMetadata(in folder: URL, _ update: ([String: Any]?) -> [String: Any]) throws {
-        let url = folder.appending(path: "metadata.json")
-        let existing = (try? Data(contentsOf: url)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        try JSONSerialization.data(withJSONObject: update(existing), options: [.prettyPrinted, .sortedKeys]).write(to: url, options: .atomic)
     }
 }

@@ -73,8 +73,7 @@ final class ContentRouter: NSViewController {
         case .home:
             return home
         case .meeting(let id):
-            let title = model.meetings.first { $0.id == id }?.title ?? "Meeting"
-            return Placeholder(EmptyStateView(symbol: "doc.text", title: title, message: "Meeting details arrive in the next slice."))
+            return MeetingViewController(model: model, meetingID: id)
         }
     }
 

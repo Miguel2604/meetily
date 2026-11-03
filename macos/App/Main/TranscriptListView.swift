@@ -67,14 +67,13 @@ final class TranscriptListView: NSScrollView, NSTableViewDataSource, NSTableView
         contentView.bounds.maxY >= table.bounds.maxY - 40
     }
 
+    private var measuredWidth: CGFloat = 0
+
     override func layout() {
         super.layout()
         // Wrapped lines change height with the width.
-        if table.numberOfRows > 0, inLiveResize { table.noteHeightOfRows(withIndexesChanged: IndexSet(0..<table.numberOfRows)) }
-    }
-
-    override func viewDidEndLiveResize() {
-        super.viewDidEndLiveResize()
+        guard table.bounds.width != measuredWidth else { return }
+        measuredWidth = table.bounds.width
         if table.numberOfRows > 0 { table.noteHeightOfRows(withIndexesChanged: IndexSet(0..<table.numberOfRows)) }
     }
 
@@ -117,7 +116,7 @@ private final class TranscriptCell: NSTableCellView {
         NSLayoutConstraint.activate([
             meta.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             meta.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            meta.widthAnchor.constraint(equalToConstant: 56),
+            meta.widthAnchor.constraint(equalToConstant: 68),
             meta.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -5),
             text.leadingAnchor.constraint(equalTo: meta.trailingAnchor, constant: 8),
             text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),

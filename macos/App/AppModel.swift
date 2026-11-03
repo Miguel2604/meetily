@@ -2,6 +2,7 @@ import AppKit
 import Audio
 import Core
 import Observation
+import Summary
 import Transcription
 
 /// App-wide state the windows observe: the store, preferences, the meetings list and the content route.
@@ -14,6 +15,10 @@ final class AppModel {
     let recorder: Recorder
     let parakeet = ParakeetModels(directory: Paths.parakeetModels)
     let whisper = WhisperModels(directory: Paths.whisperModels)
+    let builtIn = BuiltInModels(directory: Paths.summaryModels)
+    @ObservationIgnored private(set) lazy var summaries = SummaryService(store: store, builtIn: builtIn)
+    /// The summary template picked last in this session.
+    @ObservationIgnored var summaryTemplate = "standard_meeting"
     private(set) var meetings: [Meeting] = []
     var route: Route = .home
     @ObservationIgnored private var voice: VoiceModel?
@@ -65,8 +70,7 @@ final class AppModel {
             throw RecordingError(description: "Transcription model not ready: \(error). Download it in Settings › Transcription.")
         }
         report("Loading voice detection…")
-        if voice == nil { voice = try await VoiceModel.load(directory: Paths.models.appending(path: "vad")) }
-        guard let voice else { throw RecordingError(description: "Voice detection failed to load.") }
+        let detector = try await voiceDetector()
 
         report("Starting audio capture…")
         let (notices, noticeSink) = AsyncStream.makeStream(of: String.self)
@@ -84,8 +88,15 @@ final class AppModel {
         }
         return Recorder.Inputs(
             title: title, folder: Paths.meetingFolder(base: settings.saveFolder, name: title), engine: engine,
-            detector: voice.detector(), microphone: microphone, system: system,
+            detector: detector, microphone: microphone, system: system,
             microphoneName: microphone?.device?.name, systemName: system == nil ? nil : "System audio", notices: notices)
+    }
+
+    /// A fresh Silero stream; the model loads (and downloads, ~2 MB) once.
+    func voiceDetector() async throws -> any VoiceDetector {
+        if voice == nil { voice = try await VoiceModel.load(directory: Paths.models.appending(path: "vad")) }
+        guard let voice else { throw RecordingError(description: "Voice detection failed to load.") }
+        return voice.detector()
     }
 
     /// `Meeting dd_MM_yy_HH_mm_ss`, as the web app named new recordings.

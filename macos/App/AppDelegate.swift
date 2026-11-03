@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if let window = main.window { DebugSnapshot.scheduleIfRequested(window) }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
+        if let id = ProcessInfo.processInfo.environment["MEETY_OPEN_MEETING"] { model.route = .meeting(id) }
         #endif
     }
 
