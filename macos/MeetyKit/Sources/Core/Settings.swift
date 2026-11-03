@@ -13,6 +13,8 @@ public final class Settings {
     public var autoSave: Bool { didSet { defaults.set(autoSave, forKey: "autoSave") } }
     public var preferredMicDevice: String? { didSet { defaults.set(preferredMicDevice, forKey: "preferredMicDevice") } }
     public var preferredSystemDevice: String? { didSet { defaults.set(preferredSystemDevice, forKey: "preferredSystemDevice") } }
+    /// Capture other apps' audio (the global process tap). There is no device to pick, only on or off.
+    public var recordSystemAudio: Bool { didSet { defaults.set(recordSystemAudio, forKey: "recordSystemAudio") } }
     /// The "inform participants" notice shown when recording starts.
     public var showRecordingConsent: Bool { didSet { defaults.set(showRecordingConsent, forKey: "showRecordingConsent") } }
     public var recordingNotifications: Bool { didSet { defaults.set(recordingNotifications, forKey: "recordingNotifications") } }
@@ -36,6 +38,7 @@ public final class Settings {
         autoSave = defaults.object(forKey: "autoSave") as? Bool ?? true
         preferredMicDevice = defaults.string(forKey: "preferredMicDevice")
         preferredSystemDevice = defaults.string(forKey: "preferredSystemDevice")
+        recordSystemAudio = defaults.object(forKey: "recordSystemAudio") as? Bool ?? true
         showRecordingConsent = defaults.object(forKey: "showRecordingConsent") as? Bool ?? true
         recordingNotifications = defaults.object(forKey: "recordingNotifications") as? Bool ?? true
         summaryNotifications = defaults.object(forKey: "summaryNotifications") as? Bool ?? true

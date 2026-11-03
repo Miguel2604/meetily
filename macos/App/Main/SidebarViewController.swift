@@ -12,6 +12,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private let model: AppModel
+    private let record = NSButton.meety("Record a meeting", symbol: "record.circle", role: .primary, target: nil, action: Selector(("newRecording:")))
     private let outline = SidebarOutlineView()
     private let search = NSSearchField()
     private let emptyLabel = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
@@ -28,7 +29,6 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     required init?(coder: NSCoder) { fatalError("code-built UI") }
 
     override func loadView() {
-        let record = NSButton.meety("Record a meeting", symbol: "record.circle", role: .primary, target: nil, action: Selector(("newRecording:")))
         search.placeholderString = "Search transcripts"
         search.setAccessibilityLabel("Search transcripts")
         search.target = self
@@ -84,6 +84,12 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             guard let self else { return }
             _ = model.route
             selectRoute()
+        }
+        track { [weak self] in
+            guard let self else { return }
+            let busy = switch model.recorder.phase { case .idle, .failed: false; default: true }
+            record.title = busy ? "Recording…" : "Record a meeting"
+            record.isEnabled = !busy
         }
     }
 

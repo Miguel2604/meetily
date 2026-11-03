@@ -16,7 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        let model = AppModel(store: store, settings: Settings())
+        // A dev run on a copy of the data (MEETY_DATA_DIR) keeps its preferences out of the real domain.
+        let devRun = ProcessInfo.processInfo.environment["MEETY_DATA_DIR"] != nil
+        let defaults = devRun ? UserDefaults(suiteName: "com.meetily.ai.dev")! : .standard
+        let model = AppModel(store: store, settings: Settings(defaults: defaults))
         let main = MainWindowController(model: model)
         main.showWindow(nil)
         self.model = model
@@ -25,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         #if DEBUG
         if let window = main.window { DebugSnapshot.scheduleIfRequested(window) }
+        if DemoRecording.isRequested { Task { await model.startRecording() } }
         #endif
     }
 

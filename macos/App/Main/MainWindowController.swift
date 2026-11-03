@@ -33,13 +33,17 @@ final class MainWindowController: NSWindowController {
 
     @objc func focusSearch(_ sender: Any?) { sidebar.focusSearch() }
 
-    @objc func newRecording(_ sender: Any?) { model.route = .home }
+    @objc func newRecording(_ sender: Any?) {
+        model.route = .home
+        Task { await model.startRecording() }
+    }
 }
 
 /// Swaps the content pane for the current route.
 final class ContentRouter: NSViewController {
     private let model: AppModel
     private var shown: AppModel.Route?
+    private lazy var home = HomeViewController(model: model)
 
     init(model: AppModel) {
         self.model = model
@@ -67,7 +71,7 @@ final class ContentRouter: NSViewController {
     private func controller(for route: AppModel.Route) -> NSViewController {
         switch route {
         case .home:
-            return Placeholder(EmptyStateView(symbol: "waveform", title: "Welcome to Meety", message: "Record a meeting to see its live transcript here."))
+            return home
         case .meeting(let id):
             let title = model.meetings.first { $0.id == id }?.title ?? "Meeting"
             return Placeholder(EmptyStateView(symbol: "doc.text", title: title, message: "Meeting details arrive in the next slice."))

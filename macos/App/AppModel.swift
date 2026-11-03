@@ -1,6 +1,8 @@
 import AppKit
+import Audio
 import Core
 import Observation
+import Transcription
 
 /// App-wide state the windows observe: the store, preferences, the meetings list and the content route.
 @Observable
@@ -9,13 +11,91 @@ final class AppModel {
 
     let store: Store
     let settings: Settings
+    let recorder: Recorder
+    let parakeet = ParakeetModels(directory: Paths.parakeetModels)
+    let whisper = WhisperModels(directory: Paths.whisperModels)
     private(set) var meetings: [Meeting] = []
     var route: Route = .home
+    @ObservationIgnored private var voice: VoiceModel?
 
     init(store: Store, settings: Settings) {
         self.store = store
         self.settings = settings
+        recorder = Recorder(store: store)
     }
+
+    // MARK: Recording
+
+    struct RecordingError: Error, CustomStringConvertible { var description: String }
+
+    func startRecording() async {
+        route = .home
+        await recorder.start { report in try await prepareRecording(report) }
+    }
+
+    func stopRecording() async {
+        guard let id = await recorder.stop() else { return }
+        await reloadMeetings()
+        route = .meeting(id)
+    }
+
+    /// Permission, the transcription engine, voice detection, then the captures (useRecordingStart.ts).
+    private func prepareRecording(_ report: (String) -> Void) async throws -> Recorder.Inputs {
+        let title = Self.defaultTitle()
+        #if DEBUG
+        if DemoRecording.isRequested { return DemoRecording.inputs(title: title, folder: Paths.meetingFolder(base: settings.saveFolder, name: title)) }
+        #endif
+        if MicrophonePermission.isUndetermined {
+            report("Waiting for microphone permission…")
+            _ = await MicrophonePermission.request()
+        }
+        let useMicrophone = MicrophonePermission.isGranted
+        guard useMicrophone || settings.recordSystemAudio else {
+            throw RecordingError(description: "Microphone access is off. Allow Meety in System Settings › Privacy & Security › Microphone.")
+        }
+
+        report("Loading transcription model…")
+        let engine: any TranscriptionEngine
+        do {
+            switch EngineChoice.route(language: settings.language, config: try await store.transcriptConfig()) {
+            case .parakeet(let model): engine = try await parakeet.engine(model)
+            case .whisper(let model, let language): engine = try await whisper.engine(model, language: language)
+            }
+        } catch {
+            throw RecordingError(description: "Transcription model not ready: \(error). Download it in Settings › Transcription.")
+        }
+        report("Loading voice detection…")
+        if voice == nil { voice = try await VoiceModel.load(directory: Paths.models.appending(path: "vad")) }
+        guard let voice else { throw RecordingError(description: "Voice detection failed to load.") }
+
+        report("Starting audio capture…")
+        let (notices, noticeSink) = AsyncStream.makeStream(of: String.self)
+        let microphone = useMicrophone ? try LiveMicrophone(preferred: settings.preferredMicDevice) : nil
+        if let microphone { Task { for await notice in microphone.notices { noticeSink.yield(notice) } } }
+        if !useMicrophone { noticeSink.yield("Microphone access is off. Recording system audio only.") }
+        var system: SystemAudioCapture?
+        if settings.recordSystemAudio {
+            let capture = SystemAudioCapture()
+            do { try capture.start(); system = capture } catch { noticeSink.yield("System audio unavailable: \(error)") }
+        }
+        guard microphone?.device != nil || system != nil else {
+            microphone?.stop()
+            throw RecordingError(description: "No microphone or system audio available to record.")
+        }
+        return Recorder.Inputs(
+            title: title, folder: Paths.meetingFolder(base: settings.saveFolder, name: title), engine: engine,
+            detector: voice.detector(), microphone: microphone, system: system,
+            microphoneName: microphone?.device?.name, systemName: system == nil ? nil : "System audio", notices: notices)
+    }
+
+    /// `Meeting dd_MM_yy_HH_mm_ss`, as the web app named new recordings.
+    static func defaultTitle(_ date: Date = Date()) -> String {
+        date.formatted(Date.VerbatimFormatStyle(
+            format: "Meeting \(day: .twoDigits)_\(month: .twoDigits)_\(year: .twoDigits)_\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased))_\(minute: .twoDigits)_\(second: .twoDigits)",
+            timeZone: .current, calendar: Calendar(identifier: .gregorian)))
+    }
+
+    // MARK: Meetings
 
     func reloadMeetings() async {
         do { meetings = try await store.meetings() } catch { present(error) }
