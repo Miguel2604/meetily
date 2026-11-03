@@ -21,7 +21,6 @@ import GRDB
         let settings = Settings(defaults: defaults, importFrom: dir)
         #expect(settings.language == "auto")
         #expect(settings.saveFolder.path == URL.moviesDirectory.appending(path: "meety-recordings").path)
-        #expect(settings.autoSave)
         #expect(settings.showRecordingConsent)
         #expect(settings.recordingNotifications)
         #expect(!settings.onboardingCompleted)
@@ -34,22 +33,21 @@ import GRDB
         try write("onboarding-status.json", #"{"status":{"completed":true,"current_step":4,"version":"1.0","last_updated":"x","model_status":{"parakeet":"downloaded","summary":"downloaded","selected_summary_model":"qwen3.5:4b"}}}"#)
         let settings = Settings(defaults: defaults, importFrom: dir)
         #expect(settings.saveFolder.path == "/tmp/rec")
-        #expect(!settings.autoSave)
         #expect(settings.preferredMicDevice == "MacBook Pro Microphone")
         #expect(!settings.showRecordingConsent)
         #expect(settings.onboardingCompleted)
         #expect(settings.builtInSummaryModel == "qwen3.5:4b")
 
         // Later edits win over the files: the import does not run again.
-        settings.autoSave = true
+        settings.saveFolder = URL(fileURLWithPath: "/tmp/elsewhere")
         let again = Settings(defaults: defaults, importFrom: dir)
-        #expect(again.autoSave)
+        #expect(again.saveFolder.path == "/tmp/elsewhere")
     }
 
     @Test func `malformed files fall back to defaults`() throws {
         try write("recording_preferences.json", "{not json")
         let settings = Settings(defaults: defaults, importFrom: dir)
-        #expect(settings.autoSave)
+        #expect(settings.saveFolder.path == URL.moviesDirectory.appending(path: "meety-recordings").path)
     }
 }
 

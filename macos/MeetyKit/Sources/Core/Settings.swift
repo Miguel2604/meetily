@@ -10,7 +10,6 @@ public final class Settings {
     /// Transcription language: "auto", "en", "tl", or another Whisper code.
     public var language: String { didSet { defaults.set(language, forKey: "language") } }
     public var saveFolder: URL { didSet { defaults.set(saveFolder.path, forKey: "saveFolder") } }
-    public var autoSave: Bool { didSet { defaults.set(autoSave, forKey: "autoSave") } }
     public var preferredMicDevice: String? { didSet { defaults.set(preferredMicDevice, forKey: "preferredMicDevice") } }
     public var preferredSystemDevice: String? { didSet { defaults.set(preferredSystemDevice, forKey: "preferredSystemDevice") } }
     /// Capture other apps' audio (the global process tap). There is no device to pick, only on or off.
@@ -35,7 +34,6 @@ public final class Settings {
         }
         language = defaults.string(forKey: "language") ?? "auto"
         saveFolder = defaults.string(forKey: "saveFolder").map { URL(fileURLWithPath: $0, isDirectory: true) } ?? Self.defaultSaveFolder
-        autoSave = defaults.object(forKey: "autoSave") as? Bool ?? true
         preferredMicDevice = defaults.string(forKey: "preferredMicDevice")
         preferredSystemDevice = defaults.string(forKey: "preferredSystemDevice")
         recordSystemAudio = defaults.object(forKey: "recordSystemAudio") as? Bool ?? true
@@ -55,7 +53,6 @@ public final class Settings {
         }
         if let prefs = json("recording_preferences.json")?["preferences"] as? [String: Any] {
             if let folder = prefs["save_folder"] as? String, !folder.isEmpty { defaults.set(folder, forKey: "saveFolder") }
-            if let autoSave = prefs["auto_save"] as? Bool { defaults.set(autoSave, forKey: "autoSave") }
             if let mic = prefs["preferred_mic_device"] as? String { defaults.set(mic, forKey: "preferredMicDevice") }
             if let system = prefs["preferred_system_device"] as? String { defaults.set(system, forKey: "preferredSystemDevice") }
         }
