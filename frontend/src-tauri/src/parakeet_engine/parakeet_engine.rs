@@ -14,8 +14,9 @@ use tokio_util::sync::CancellationToken;
 /// Quantization type for Parakeet models
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum QuantizationType {
-    FP32,   // Full precision
-    Int8,   // 8-bit integer quantization (faster)
+    FP32,    // Full precision
+    Int8,    // 8-bit integer quantization (faster)
+    Ternary, // 1.58-bit weights packed as MatMulNBits; loads the plain *.onnx files
 }
 
 impl Default for QuantizationType {
@@ -85,6 +86,15 @@ pub struct ModelInfo {
 struct ArtifactSpec {
     filename: &'static str,
     exact_bytes: u64,
+    /// Full download URL when this file is not hosted under the model's `source_base_url`.
+    source_url: Option<&'static str>,
+}
+
+fn artifact_url(base_url: &str, artifact: &ArtifactSpec) -> String {
+    artifact
+        .source_url
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{}/{}", base_url.trim_end_matches('/'), artifact.filename))
 }
 
 struct ModelSpec {
@@ -104,17 +114,30 @@ impl ModelSpec {
 }
 
 const PARAKEET_V3_ARTIFACTS: &[ArtifactSpec] = &[
-    ArtifactSpec { filename: "encoder-model.int8.onnx", exact_bytes: 652_183_999 },
-    ArtifactSpec { filename: "decoder_joint-model.int8.onnx", exact_bytes: 18_202_004 },
-    ArtifactSpec { filename: "nemo128.onnx", exact_bytes: 139_764 },
-    ArtifactSpec { filename: "vocab.txt", exact_bytes: 93_939 },
+    ArtifactSpec { filename: "encoder-model.int8.onnx", exact_bytes: 652_183_999, source_url: None },
+    ArtifactSpec { filename: "decoder_joint-model.int8.onnx", exact_bytes: 18_202_004, source_url: None },
+    ArtifactSpec { filename: "nemo128.onnx", exact_bytes: 139_764, source_url: None },
+    ArtifactSpec { filename: "vocab.txt", exact_bytes: 93_939, source_url: None },
 ];
 
 const PARAKEET_V2_ARTIFACTS: &[ArtifactSpec] = &[
-    ArtifactSpec { filename: "encoder-model.int8.onnx", exact_bytes: 652_184_014 },
-    ArtifactSpec { filename: "decoder_joint-model.int8.onnx", exact_bytes: 8_998_286 },
-    ArtifactSpec { filename: "nemo128.onnx", exact_bytes: 139_764 },
-    ArtifactSpec { filename: "vocab.txt", exact_bytes: 9_384 },
+    ArtifactSpec { filename: "encoder-model.int8.onnx", exact_bytes: 652_184_014, source_url: None },
+    ArtifactSpec { filename: "decoder_joint-model.int8.onnx", exact_bytes: 8_998_286, source_url: None },
+    ArtifactSpec { filename: "nemo128.onnx", exact_bytes: 139_764, source_url: None },
+    ArtifactSpec { filename: "vocab.txt", exact_bytes: 9_384, source_url: None },
+];
+
+// Parakeet Redux (moondream, CC-BY-4.0): ternary distillation of parakeet-tdt-0.6b-v3, same
+// TDT decoder and vocab. ONNX export by eschmidbauer; preprocessor reused from the v3 export.
+const PARAKEET_REDUX_ARTIFACTS: &[ArtifactSpec] = &[
+    ArtifactSpec { filename: "encoder-model.onnx", exact_bytes: 343_841_943, source_url: None },
+    ArtifactSpec { filename: "decoder_joint-model.onnx", exact_bytes: 72_552_270, source_url: None },
+    ArtifactSpec {
+        filename: "nemo128.onnx",
+        exact_bytes: 139_764,
+        source_url: Some("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/nemo128.onnx"),
+    },
+    ArtifactSpec { filename: "vocab.txt", exact_bytes: 93_939, source_url: None },
 ];
 
 const PARAKEET_MODEL_SPECS: &[ModelSpec] = &[
@@ -135,6 +158,15 @@ const PARAKEET_MODEL_SPECS: &[ModelSpec] = &[
         description: "Previous version with int8 quantization, good balance of speed and accuracy",
         source_base_url: "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/0bbb45a3365852604aef28b538a8f066f4ccaa85",
         artifacts: PARAKEET_V2_ARTIFACTS,
+    },
+    ModelSpec {
+        name: "parakeet-redux-0.6b-v3",
+        size_mb: 398,
+        quantization: QuantizationType::Ternary,
+        speed: "Ultra Fast (Redux)",
+        description: "Compact 25-language Parakeet v3 distillation, smallest download",
+        source_base_url: "https://huggingface.co/eschmidbauer/parakeet-redux-onnx/resolve/1c285ba78d6f1880803f65355133a5ad3559a407",
+        artifacts: PARAKEET_REDUX_ARTIFACTS,
     },
 ];
 
@@ -909,7 +941,7 @@ impl ParakeetEngine {
                 continue;
             }
 
-            let file_url = format!("{}/{}", base_url.trim_end_matches('/'), artifact.filename);
+            let file_url = artifact_url(base_url, artifact);
             let range_start = (local_bytes > 0 && local_bytes < artifact.exact_bytes)
                 .then_some(local_bytes);
             let response = self
@@ -1237,12 +1269,24 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::oneshot;
+
+    #[test]
+    fn artifact_url_prefers_per_file_source() {
+        let redux = find_model_spec("parakeet-redux-0.6b-v3").expect("redux in catalog");
+        let urls: Vec<String> = redux
+            .artifacts
+            .iter()
+            .map(|artifact| artifact_url(redux.source_base_url, artifact))
+            .collect();
+        assert!(urls[0].starts_with(redux.source_base_url) && urls[0].ends_with("/encoder-model.onnx"));
+        assert!(urls[2].contains("istupakov/parakeet-tdt-0.6b-v3-onnx") && urls[2].ends_with("/nemo128.onnx"));
+    }
     const TEST_MODEL_NAME: &str = "parakeet-test";
     const SMALL_ARTIFACTS: &[ArtifactSpec] = &[
-        ArtifactSpec { filename: "encoder.bin", exact_bytes: 4 },
-        ArtifactSpec { filename: "decoder.bin", exact_bytes: 3 },
-        ArtifactSpec { filename: "nemo.bin", exact_bytes: 2 },
-        ArtifactSpec { filename: "vocab.txt", exact_bytes: 1 },
+        ArtifactSpec { filename: "encoder.bin", exact_bytes: 4, source_url: None },
+        ArtifactSpec { filename: "decoder.bin", exact_bytes: 3, source_url: None },
+        ArtifactSpec { filename: "nemo.bin", exact_bytes: 2, source_url: None },
+        ArtifactSpec { filename: "vocab.txt", exact_bytes: 1, source_url: None },
     ];
     const SMALL_MODEL_SPECS: &[ModelSpec] = &[ModelSpec {
         name: TEST_MODEL_NAME,
@@ -1561,7 +1605,7 @@ mod tests {
     async fn cancelled_near_complete_artifact_is_resumed_on_retry() {
         const ARTIFACTS: &[ArtifactSpec] = &[ArtifactSpec {
             filename: "near.bin",
-            exact_bytes: 100,
+            exact_bytes: 100, source_url: None
         }];
         const PREFIX: &[u8] = &[b'A'; 99];
 
@@ -1654,7 +1698,7 @@ mod tests {
     async fn range_ignored_replaces_partial_with_honest_progress() {
         const ARTIFACTS: &[ArtifactSpec] = &[ArtifactSpec {
             filename: "model.bin",
-            exact_bytes: 4,
+            exact_bytes: 4, source_url: None
         }];
         let (_temp_dir, engine, model_dir) = test_engine().await;
         fs::create_dir_all(&model_dir).await.expect("create model directory");
@@ -1697,7 +1741,7 @@ mod tests {
     async fn range_416_retries_fresh_with_honest_progress() {
         const ARTIFACTS: &[ArtifactSpec] = &[ArtifactSpec {
             filename: "model.bin",
-            exact_bytes: 4,
+            exact_bytes: 4, source_url: None
         }];
         let (_temp_dir, engine, model_dir) = test_engine().await;
         fs::create_dir_all(&model_dir).await.expect("create model directory");
@@ -1742,11 +1786,11 @@ mod tests {
         const ARTIFACTS: &[ArtifactSpec] = &[
             ArtifactSpec {
                 filename: "complete.bin",
-                exact_bytes: 1,
+                exact_bytes: 1, source_url: None
             },
             ArtifactSpec {
                 filename: "target.bin",
-                exact_bytes: 4,
+                exact_bytes: 4, source_url: None
             },
         ];
         let cases = vec![
@@ -1885,7 +1929,7 @@ mod tests {
     async fn cancellation_wins_before_terminal_commit() {
         const ARTIFACTS: &[ArtifactSpec] = &[ArtifactSpec {
             filename: "model.bin",
-            exact_bytes: 4,
+            exact_bytes: 4, source_url: None
         }];
         let (_temp_dir, engine, model_dir) = test_engine().await;
         let hook = Arc::new(DownloadStateTestHook {

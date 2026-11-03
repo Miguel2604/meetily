@@ -501,3 +501,33 @@ impl ParakeetModel {
         Ok(timestamped_result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Manual smoke test for a candidate catalog model:
+    /// PARAKEET_SMOKE_DIR=<model dir> PARAKEET_SMOKE_F32=<16kHz mono f32le file> [PARAKEET_SMOKE_QUANTIZED=1]
+    /// cargo test parakeet_model_smoke -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn parakeet_model_smoke() {
+        let dir = std::env::var("PARAKEET_SMOKE_DIR").expect("PARAKEET_SMOKE_DIR");
+        let audio = fs::read(std::env::var("PARAKEET_SMOKE_F32").expect("PARAKEET_SMOKE_F32")).unwrap();
+        let samples: Vec<f32> = audio
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
+        let quantized = std::env::var("PARAKEET_SMOKE_QUANTIZED").is_ok();
+        let mut model = ParakeetModel::new(&dir, quantized).unwrap();
+        let started = std::time::Instant::now();
+        let result = model.transcribe_samples(samples.clone()).unwrap();
+        println!(
+            "{:.2}s audio in {:?}: {}",
+            samples.len() as f32 / 16_000.0,
+            started.elapsed(),
+            result.text
+        );
+        assert!(!result.text.trim().is_empty());
+    }
+}
