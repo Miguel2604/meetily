@@ -124,3 +124,23 @@ struct RealDeviceTests {
         #expect(samples.count > 40_000)
     }
 }
+
+let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Fixtures").standardized
+
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
+struct RealSystemAudioTests {
+    @Test func `tap hears afplay`() async throws {
+        let capture = SystemAudioCapture()
+        try capture.start()
+        let player = Process()
+        player.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
+        player.arguments = [fixtures.appending(path: "he_aac_48k_5s.m4a").path]
+        try player.run()
+        try await Task.sleep(for: .seconds(2))
+        let samples = capture.drain()
+        player.terminate()
+        capture.stop()
+        #expect(samples.count > 80_000)
+        #expect(AudioLevel(samples: samples).peak > 0.001)
+    }
+}
