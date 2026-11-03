@@ -18,7 +18,7 @@ export default function AnalyticsDataModal({ isOpen, onClose, onConfirmDisable }
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6 text-blue-600" />
+            <Shield className="w-6 h-6 text-ink-600" />
             <h2 className="text-xl font-semibold text-gray-900">What Analytics Collects</h2>
           </div>
           <button
@@ -107,13 +107,13 @@ export default function AnalyticsDataModal({ isOpen, onClose, onConfirmDisable }
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <h4 className="font-semibold text-red-900 mb-2">What We DON'T Collect:</h4>
             <ul className="text-sm text-red-800 space-y-1 ml-4">
-              <li>• ❌ Meeting names or titles</li>
-              <li>• ❌ File names, file paths, or meeting folders</li>
-              <li>• ❌ Meeting transcripts or content</li>
-              <li>• ❌ Audio recordings</li>
-              <li>• ❌ Device names (only types: Bluetooth/Wired)</li>
-              <li>• ❌ Personal information</li>
-              <li>• ❌ Any identifiable data</li>
+              <li>Meeting names or titles</li>
+              <li>File names, file paths, or meeting folders</li>
+              <li>Meeting transcripts or content</li>
+              <li>Audio recordings</li>
+              <li>Device names (only types: Bluetooth/Wired)</li>
+              <li>Personal information</li>
+              <li>Any identifiable data</li>
             </ul>
           </div>
 

@@ -202,11 +202,11 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
             </button>
           </div>
 
-          <div className="p-4 border rounded-lg bg-blue-50">
-            <div className="text-sm text-blue-800">
+          <div className="p-4 border rounded-lg bg-ink-50">
+            <div className="text-sm text-ink-800">
               <strong>File Format:</strong> {preferences.file_format.toUpperCase()} files
             </div>
-            <div className="text-xs text-blue-600 mt-1">
+            <div className="text-xs text-ink-600 mt-1">
               Recordings are saved with timestamp: recording_YYYYMMDD_HHMMSS.{preferences.file_format}
             </div>
           </div>

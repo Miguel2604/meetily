@@ -220,15 +220,15 @@ export default function AnalyticsConsentSwitch() {
           </div>
         )}
 
-        <div className="flex items-start gap-2 p-2 bg-blue-50 rounded border border-blue-200">
-          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="text-xs text-blue-700">
+        <div className="flex items-start gap-2 p-2 bg-ink-50 rounded border border-ink-200">
+          <Info className="w-4 h-4 text-ink-600 mt-0.5 flex-shrink-0" />
+          <div className="text-xs text-ink-700">
             <p className="mb-1">
               Your meetings, transcripts, and recordings remain completely private and local.
             </p>
             <button
               onClick={handlePrivacyPolicyClick}
-              className="text-blue-600 hover:text-blue-800 underline hover:no-underline"
+              className="text-ink-600 hover:text-ink-800 underline hover:no-underline"
             >
               View Privacy Policy
             </button>

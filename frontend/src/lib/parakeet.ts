@@ -54,14 +54,14 @@ export interface ModelDisplayInfo {
 export const MODEL_DISPLAY_CONFIG: Record<string, ModelDisplayInfo> = {
   'parakeet-ultra': {
     friendlyName: 'Ultra',
-    icon: '🎯',
+    icon: '',
     tagline: 'Neural Engine • Most accurate for English meetings',
     recommended: true,
     tier: 'precise'
   },
   'phonon-2': {
     friendlyName: 'Phonon-2',
-    icon: '⚡',
+    icon: '',
     tagline: 'Neural Engine • Smallest and fastest, English only',
     tier: 'fastest'
   }
@@ -70,10 +70,10 @@ export const MODEL_DISPLAY_CONFIG: Record<string, ModelDisplayInfo> = {
 // Helper functions
 export function getModelIcon(accuracy: ModelAccuracy): string {
   switch (accuracy) {
-    case 'High': return '🔥';
-    case 'Good': return '⚡';
-    case 'Decent': return '🚀';
-    default: return '📊';
+    case 'High': return '';
+    case 'Good': return '';
+    case 'Decent': return '';
+    default: return '';
   }
 }
 

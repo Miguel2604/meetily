@@ -10,10 +10,19 @@ module.exports = {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'var(--font-source-sans-3)'
+  				'var(--font-sans)',
+  				'system-ui',
+  				'sans-serif'
   			]
   		},
   		colors: {
+  			// Achromatic ledger: chrome is neutral ink; the one hue (signal) marks live data only.
+  			gray: { ...require('tailwindcss/colors').neutral, 400: '#767676' }, // 400 lifted to 4.5:1 on white
+  			ink: {
+  				50: '#f5f5f5', 100: '#ededed', 200: '#e2e2e2', 300: '#cfcfcf', 400: '#9a9a9a',
+  				500: '#3d3d3d', 600: '#1f1f1f', 700: '#0a0a0a', 800: '#141414', 900: '#0a0a0a'
+  			},
+  			signal: { DEFAULT: '#1d5fbf', soft: '#e8eff9' },
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			border: 'hsl(var(--border))',

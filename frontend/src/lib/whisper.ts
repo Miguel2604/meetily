@@ -53,10 +53,10 @@ export interface TranscribeAudioRequest {
 // Helper functions
 export function getModelIcon(accuracy: ModelAccuracy): string {
   switch (accuracy) {
-    case 'High': return '🔥';
-    case 'Good': return '⚡';
-    case 'Decent': return '🚀';
-    default: return '📊';
+    case 'High': return '';
+    case 'Good': return '';
+    case 'Decent': return '';
+    default: return '';
   }
 }
 

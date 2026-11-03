@@ -19,19 +19,19 @@ export async function showRecordingNotification(): Promise<void> {
     if (showNotification) {
       let dontShowAgain = false;
 
-      const toastId = toast.info('🔴 Recording Started', {
+      const toastId = toast.info('Recording Started', {
         description: (
           <div className="space-y-3 min-w-[280px]">
             <p className="text-sm font-medium text-gray-900">
               Inform all participants this meeting is being recorded.
             </p>
-            <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100 p-2 rounded transition-colors">
+            <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-ink-100 p-2 rounded transition-colors">
               <input
                 type="checkbox"
                 onChange={(e) => {
                   dontShowAgain = e.target.checked;
                 }}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-2"
+                className="rounded border-gray-300 text-ink-600 focus:ring-ink-500 focus:ring-2"
               />
               <span className="select-none text-gray-700">Don't show this again</span>
             </label>

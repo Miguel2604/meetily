@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import Image from 'next/image';
 import AnalyticsConsentSwitch from "./AnalyticsConsentSwitch";
 import { UpdateDialog } from "./UpdateDialog";
 import { updateService, UpdateInfo } from '@/services/updateService';
 import { Button } from './ui/button';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { MeetyMark } from './MeetyMark';
 
+const FACTS = [
+    ['Stays on this computer', 'Audio, transcripts and summaries are stored and processed locally. Nothing is uploaded unless you pick a cloud model.'],
+    ['Any model you like', 'Run the built-in or an Ollama model, or connect your own API key. No lock-in.'],
+    ['No per-minute bill', 'Local transcription and summaries cost nothing to run.'],
+    ['Works with every call app', 'Zoom, Google Meet, Teams or a room with no call at all.'],
+];
 
 export function About() {
     const [currentVersion, setCurrentVersion] = useState<string>('0.4.1');
@@ -17,17 +22,8 @@ export function About() {
     const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
     useEffect(() => {
-        // Get current version on mount
         getVersion().then(setCurrentVersion).catch(console.error);
     }, []);
-
-    const handleContactClick = async () => {
-        try {
-            await invoke('open_external_url', { url: 'https://meetily.zackriya.com/#about' });
-        } catch (error) {
-            console.error('Failed to open link:', error);
-        }
-    };
 
     const handleCheckForUpdates = async () => {
         setIsChecking(true);
@@ -48,110 +44,42 @@ export function About() {
     };
 
     return (
-        <div className="p-4 space-y-4 h-[80vh] overflow-y-auto">
-            {/* Compact Header */}
-            <div className="text-center">
-                <div className="mb-3">
-                    <Image
-                        src="icon_128x128.png"
-                        alt="Meety Logo"
-                        width={64}
-                        height={64}
-                        className="mx-auto"
-                    />
+        <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center gap-3">
+                <MeetyMark size={44} />
+                <div className="flex-1">
+                    <h2 className="text-xl font-semibold tracking-[-0.01em] text-gray-950">Meety</h2>
+                    <p className="text-sm text-gray-600 tabular-nums">
+                        Version {currentVersion}
+                        {updateInfo?.available && <> · v{updateInfo.version} available</>}
+                    </p>
                 </div>
-                {/* <h1 className="text-xl font-bold text-gray-900">Meety</h1> */}
-                <span className="text-sm text-gray-500"> v{currentVersion}</span>
-                <p className="text-medium text-gray-600 mt-1">
-                    Real-time notes and summaries that never leave your machine.
-                </p>
-                <div className="mt-3">
-                    <Button
-                        onClick={handleCheckForUpdates}
-                        disabled={isChecking}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                    >
-                        {isChecking ? (
-                            <>
-                                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                                Checking...
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 className="h-3 w-3 mr-2" />
-                                Check for Updates
-                            </>
-                        )}
-                    </Button>
-                    {updateInfo?.available && (
-                        <div className="mt-2 text-xs text-blue-600">
-                            Update available: v{updateInfo.version}
-                        </div>
-                    )}
-                </div>
+                <Button onClick={handleCheckForUpdates} disabled={isChecking} variant="outline" size="sm">
+                    {isChecking && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
+                    {isChecking ? 'Checking…' : 'Check for updates'}
+                </Button>
             </div>
 
-            {/* Features Grid - Compact */}
-            <div className="space-y-3">
-                <h2 className="text-base font-semibold text-gray-800">What makes Meety different</h2>
-                <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-gray-50 rounded p-3 hover:bg-gray-100 transition-colors">
-                        <h3 className="font-bold text-sm text-gray-900 mb-1">Privacy-first</h3>
-                        <p className="text-xs text-gray-600 leading-relaxed">Your data & AI processing workflow can now stay within your premise. No cloud, no leaks.</p>
-                    </div>
-                    <div className="bg-gray-50 rounded p-3 hover:bg-gray-100 transition-colors">
-                        <h3 className="font-bold text-sm text-gray-900 mb-1">Use Any Model</h3>
-                        <p className="text-xs text-gray-600 leading-relaxed">Prefer local open-source model? Great. Want to plug in an external API? Also fine. No lock-in.</p>
-                    </div>
-                    <div className="bg-gray-50 rounded p-3 hover:bg-gray-100 transition-colors">
-                        <h3 className="font-bold text-sm text-gray-900 mb-1">Cost-Smart</h3>
-                        <p className="text-xs text-gray-600 leading-relaxed">Avoid pay-per-minute bills by running models locally (or pay only for the calls you choose).</p>
-                    </div>
-                    <div className="bg-gray-50 rounded p-3 hover:bg-gray-100 transition-colors">
-                        <h3 className="font-bold text-sm text-gray-900 mb-1">Works everywhere</h3>
-                        <p className="text-xs text-gray-600 leading-relaxed">Google Meet, Zoom, Teams-online or offline.</p>
-                    </div>
-                </div>
-            </div>
+            <p className="text-[15px] leading-relaxed text-gray-900">
+                Meety records your meetings, transcribes them and writes the notes, all on this computer.
+            </p>
 
-            {/* Coming Soon - Compact */}
-            <div className="bg-blue-50 rounded p-3">
-                <p className="text-s text-blue-800">
-                    <span className="font-bold">Coming soon:</span> A library of on-device AI agents-automating follow-ups, action tracking, and more.
-                </p>
-            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+                {FACTS.map(([title, text]) => (
+                    <div key={title}>
+                        <dt className="text-sm font-medium text-gray-950">{title}</dt>
+                        <dd className="mt-1 text-sm leading-relaxed text-gray-600">{text}</dd>
+                    </div>
+                ))}
+            </dl>
 
-            {/* CTA Section - Compact */}
-            <div className="text-center space-y-2">
-                <h3 className="text-medium font-semibold text-gray-800">Ready to push your business further?</h3>
-                <p className="text-s text-gray-600">
-                    If you're planning to build privacy-first custom AI agents or a fully tailored product for your <span className="font-bold">business</span>, we can help you build it.
-                </p>
-                <button
-                    onClick={handleContactClick}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors duration-200 shadow-sm hover:shadow-md"
-                >
-                    Chat with the Zackriya team
-                </button>
-            </div>
-
-            {/* Footer - Compact */}
-            <div className="pt-2 border-t border-gray-200 text-center">
-                <p className="text-xs text-gray-400">
-                    Built by Zackriya Solutions
-                </p>
-            </div>
             <AnalyticsConsentSwitch />
 
-            {/* Update Dialog */}
             <UpdateDialog
                 open={showUpdateDialog}
                 onOpenChange={setShowUpdateDialog}
                 updateInfo={updateInfo}
             />
         </div>
-
     )
 }

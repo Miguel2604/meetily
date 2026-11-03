@@ -138,7 +138,7 @@ export function AudioBackendSelector({
               key={backend.id}
               className={`flex items-start p-3 border rounded-lg transition-all ${
                 currentBackend === backend.id
-                  ? 'border-blue-500 bg-blue-50'
+                  ? 'border-ink-500 bg-ink-50'
                   : 'border-gray-300 hover:border-gray-400 bg-white'
               } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
@@ -149,7 +149,7 @@ export function AudioBackendSelector({
                 checked={currentBackend === backend.id}
                 onChange={() => handleBackendChange(backend.id)}
                 disabled={isDisabled}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                className="mt-1 h-4 w-4 text-ink-600 focus:ring-ink-500 border-gray-300"
               />
               <div className="ml-3 flex-1">
                 <div className="flex items-center justify-between">
@@ -157,7 +157,7 @@ export function AudioBackendSelector({
                     {backend.name}
                   </span>
                   {currentBackend === backend.id && (
-                    <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                    <span className="text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded">
                       Active
                     </span>
                   )}

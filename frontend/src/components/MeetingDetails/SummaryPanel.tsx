@@ -282,8 +282,8 @@ export function SummaryPanel({
       {isSummaryLoading ? (
         <div className="flex items-center justify-center flex-1">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-gray-600">Generating AI Summary...</p>
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-200 border-t-signal mb-3"></div>
+            <p className="text-sm text-gray-600">Writing the summary…</p>
           </div>
         </div>
       ) : !hasSummary ? (
@@ -295,7 +295,7 @@ export function SummaryPanel({
         />
       ) : (
         <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
-          <div className="p-6 w-full">
+          <div className="px-10 py-8 w-full max-w-[860px]">
             <BlockNoteSummaryView
               ref={summaryRef}
               summaryData={aiSummary}
@@ -315,12 +315,9 @@ export function SummaryPanel({
               }}
             />
           </div>
-          {summaryStatus !== 'idle' && (
-            <div className={`mt-4 p-4 rounded-lg ${summaryStatus === 'error' ? 'bg-red-100 text-red-700' :
-              summaryStatus === 'completed' ? 'bg-green-100 text-green-700' :
-                'bg-blue-100 text-blue-700'
-              }`}>
-              <p className="text-sm font-medium">{getSummaryStatusMessage(summaryStatus)}</p>
+          {summaryStatus !== 'idle' && summaryStatus !== 'completed' && (
+            <div className={`mx-6 mb-6 px-3 py-2 rounded-md text-sm ${summaryStatus === 'error' ? 'bg-[#ffedea] text-[#831c1e]' : 'bg-gray-100 text-gray-700'}`}>
+              {getSummaryStatusMessage(summaryStatus)}
             </div>
           )}
         </div>

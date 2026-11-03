@@ -444,7 +444,7 @@ export function DownloadProgressStep() {
         <div className="space-y-2">
           <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-gray-700 to-gray-900 rounded-full transition-all duration-300"
+              className="h-full bg-signal rounded-full transition-all duration-300"
               style={{ width: `${state.progress}%` }}
             />
           </div>

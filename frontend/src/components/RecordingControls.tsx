@@ -3,7 +3,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { appDataDir } from '@tauri-apps/api/path';
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { Play, Pause, Square, Mic, AlertCircle, X } from 'lucide-react';
+import { Play, Pause, Square, AlertCircle, X } from 'lucide-react';
 import { ProcessRequest, SummaryResponse } from '@/types/summary';
 import { listen } from '@tauri-apps/api/event';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -334,7 +334,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({
   return (
     <TooltipProvider>
       <div className="flex flex-col space-y-2">
-        <div className="flex items-center space-x-2 bg-white rounded-full shadow-lg px-4 py-2">
+        <div className="flex items-center space-x-2 bg-white rounded-full border border-gray-200 shadow-[0_4px_16px_rgba(0,0,0,0.08)] px-4 py-2">
           {isProcessing && !isParentProcessing ? (
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
@@ -346,26 +346,27 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({
                 <>
                   <button
                     onClick={handleStartRecording}
-                    className="w-10 h-10 flex items-center justify-center bg-red-500 rounded-full text-white hover:bg-red-600 transition-colors"
+                    className="w-10 h-10 flex items-center justify-center bg-gray-950 rounded-full text-white hover:bg-gray-800 transition-colors"
+                    aria-label="Start recording"
                   >
-                    <Mic size={16} />
+                    <span className="block w-3 h-3 rounded-full bg-red-500" />
                   </button>
 
                   <div className="w-px h-6 bg-gray-200 mx-1" />
 
                   <div className="flex items-center space-x-1 mx-2">
-                    <div className="text-sm text-gray-600 min-w-[40px]">
+                    <div className="text-sm text-gray-600 min-w-[40px] tabular-nums">
                       {formatTime(currentTime)}
                     </div>
                     <div
                       className="relative w-24 h-1 bg-gray-200 rounded-full"
                     >
                       <div
-                        className="absolute h-full bg-blue-500 rounded-full"
+                        className="absolute h-full bg-signal rounded-full"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <div className="text-sm text-gray-600 min-w-[40px]">
+                    <div className="text-sm text-gray-600 min-w-[40px] tabular-nums">
                       {formatTime(duration)}
                     </div>
                   </div>
@@ -389,13 +390,14 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({
                             handleStartRecording();
                           }}
                           disabled={isStarting || isProcessing || isRecordingDisabled || isValidatingModel || isStartingRecording}
-                          className={`w-12 h-12 flex items-center justify-center ${isStarting || isProcessing || isValidatingModel || isStartingRecording ? 'bg-gray-400' : 'bg-red-500 hover:bg-red-600'
-                            } rounded-full text-white transition-colors relative`}
+                          className={`w-12 h-12 flex items-center justify-center ${isStarting || isProcessing || isValidatingModel || isStartingRecording ? 'bg-gray-400' : 'bg-gray-950 hover:bg-gray-800 active:scale-95'
+                            } rounded-full text-white transition-[background-color,transform] relative`}
+                          aria-label="Start recording"
                         >
                           {isValidatingModel || isStartingRecording ? (
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                           ) : (
-                            <Mic size={20} />
+                            <span className="block w-3.5 h-3.5 rounded-full bg-red-500" />
                           )}
                         </button>
                       </TooltipTrigger>
@@ -445,10 +447,11 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({
                               handleStopRecording();
                             }}
                             disabled={isStopping || isPausing || isResuming || isStartingRecording}
-                            className={`w-10 h-10 flex items-center justify-center ${isStopping || isPausing || isResuming || isStartingRecording ? 'bg-gray-400' : 'bg-red-500 hover:bg-red-600'
-                              } rounded-full text-white transition-colors relative`}
+                            className={`w-10 h-10 flex items-center justify-center ${isStopping || isPausing || isResuming || isStartingRecording ? 'bg-gray-400' : 'bg-gray-950 hover:bg-gray-800 active:scale-95'
+                              } rounded-full text-white transition-[background-color,transform] relative`}
+                            aria-label="Stop recording"
                           >
-                            <Square size={16} />
+                            <Square size={14} fill="currentColor" />
                             {isStopping && (
                               <div className="absolute -top-8 text-gray-600 font-medium text-xs">
                                 Stopping...
@@ -467,7 +470,7 @@ export const RecordingControls: React.FC<RecordingControlsProps> = ({
                     {barHeights.map((height, index) => (
                       <div
                         key={index}
-                        className={`w-1 rounded-full transition-all duration-200 ${isPaused ? 'bg-orange-500' : 'bg-red-500'
+                        className={`w-1 rounded-full transition-all duration-200 ${isPaused ? 'bg-gray-400' : 'bg-signal'
                           }`}
                         style={{
                           height: isRecording && !isPaused ? height : '4px',

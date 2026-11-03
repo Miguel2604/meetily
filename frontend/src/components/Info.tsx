@@ -12,19 +12,15 @@ const Info = React.forwardRef<HTMLButtonElement, InfoProps>(({ isCollapsed }, re
   return (
     <Dialog aria-describedby={undefined}>
       <DialogTrigger asChild>
-        <button 
-          ref={ref} 
-          className={`flex items-center justify-center mb-2 cursor-pointer border-none transition-colors ${
-            isCollapsed 
-              ? "bg-transparent p-2 hover:bg-gray-100 rounded-lg" 
-              : "w-full px-3 py-1.5 mt-1 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-200 rounded-lg shadow-sm"
-          }`}
-          title="About Meety"
+        <button
+          ref={ref}
+          className={isCollapsed
+            ? "flex items-center justify-center w-10 h-10 rounded-md text-gray-600 hover:bg-black/[0.04] hover:text-gray-950 transition-colors"
+            : "w-full flex items-center gap-2.5 h-8 px-2.5 rounded-md text-sm text-gray-700 hover:bg-black/[0.04] hover:text-gray-950 transition-colors"}
+          aria-label="About Meety"
         >
-          <InfoIcon className={`text-gray-600 ${isCollapsed ? "w-5 h-5" : "w-4 h-4"}`} />
-          {!isCollapsed && (
-            <span className="ml-2 text-sm text-gray-700">About</span>
-          )}
+          <InfoIcon className="w-4 h-4" strokeWidth={1.75} />
+          {!isCollapsed && <span>About</span>}
         </button>
       </DialogTrigger>
       <DialogContent>

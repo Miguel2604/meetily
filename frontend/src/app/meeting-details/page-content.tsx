@@ -190,8 +190,21 @@ export default function PageContent({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="flex flex-col h-screen min-w-0 bg-gray-50"
+      className="flex flex-col h-screen min-w-0 bg-white"
     >
+      <header className="flex-shrink-0 flex items-baseline gap-3 px-6 pt-5 pb-4 border-b border-gray-200 min-w-0">
+        <h1 className="text-xl font-semibold tracking-[-0.01em] text-gray-950 truncate">
+          {meetingData.meetingTitle || meeting.title || 'Untitled meeting'}
+        </h1>
+        <p className="flex-shrink-0 text-sm text-gray-600 tabular-nums">
+          {[
+            meeting.created_at && !Number.isNaN(Date.parse(meeting.created_at))
+              ? new Date(meeting.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+              : null,
+            totalCount ? `${totalCount.toLocaleString()} ${totalCount === 1 ? 'segment' : 'segments'}` : null,
+          ].filter(Boolean).join(' · ')}
+        </p>
+      </header>
       <div className="flex flex-1 min-w-0 overflow-hidden">
         <MeetingDetailsSplitView
           activeTab={activeTab}

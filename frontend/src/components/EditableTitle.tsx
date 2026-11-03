@@ -49,7 +49,7 @@ export const EditableTitle: React.FC<EditableTitleProps> = ({
             onFinishEditing();
           }
         }}
-        className="text-2xl font-bold bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-3 py-1 w-full resize-none overflow-hidden"
+        className="text-2xl font-bold bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-ink-500 rounded px-3 py-1 w-full resize-none overflow-hidden"
         style={{ minWidth: '300px', minHeight: '40px' }}
         autoFocus
         rows={1}

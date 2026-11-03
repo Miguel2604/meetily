@@ -117,16 +117,16 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                     }
                                 }}
                             >
-                                <SelectTrigger className='focus:ring-1 focus:ring-blue-500 focus:border-blue-500'>
+                                <SelectTrigger className='focus:ring-1 focus:ring-ink-500 focus:border-ink-500'>
                                     <SelectValue placeholder="Select provider" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="parakeet">⚡ Parakeet (Recommended - Real-time / Accurate)</SelectItem>
-                                    <SelectItem value="localWhisper">🏠 Local Whisper (High Accuracy)</SelectItem>
-                                    {/* <SelectItem value="deepgram">☁️ Deepgram (Backup)</SelectItem>
-                                    <SelectItem value="elevenLabs">☁️ ElevenLabs</SelectItem>
-                                    <SelectItem value="groq">☁️ Groq</SelectItem>
-                                    <SelectItem value="openai">☁️ OpenAI</SelectItem> */}
+                                    <SelectItem value="parakeet">Parakeet (Recommended - Real-time / Accurate)</SelectItem>
+                                    <SelectItem value="localWhisper">Local Whisper (High Accuracy)</SelectItem>
+                                    {/* <SelectItem value="deepgram">Deepgram (Backup)</SelectItem>
+                                    <SelectItem value="elevenLabs">ElevenLabs</SelectItem>
+                                    <SelectItem value="groq">Groq</SelectItem>
+                                    <SelectItem value="openai">OpenAI</SelectItem> */}
                                 </SelectContent>
                             </Select>
 
@@ -138,7 +138,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                         setTranscriptModelConfig({ ...transcriptModelConfig, provider: uiProvider, model });
                                     }}
                                 >
-                                    <SelectTrigger className='focus:ring-1 focus:ring-blue-500 focus:border-blue-500'>
+                                    <SelectTrigger className='focus:ring-1 focus:ring-ink-500 focus:border-ink-500'>
                                         <SelectValue placeholder="Select model" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -181,7 +181,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                             <div className="relative mx-1">
                                 <Input
                                     type={showApiKey ? "text" : "password"}
-                                    className={`pr-24 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${isApiKeyLocked ? 'bg-gray-100 cursor-not-allowed' : ''
+                                    className={`pr-24 focus:ring-1 focus:ring-ink-500 focus:border-ink-500 ${isApiKeyLocked ? 'bg-gray-100 cursor-not-allowed' : ''
                                         }`}
                                     value={apiKey || ''}
                                     onChange={(e) => setApiKey(e.target.value)}

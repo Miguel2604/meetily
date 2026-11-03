@@ -53,7 +53,7 @@ export function useTranscriptionModels(transcriptModelConfig: TranscriptModelCon
         .map((m) => ({
           provider: 'whisper' as const,
           name: m.name,
-          displayName: `🏠 Whisper: ${m.name}`,
+          displayName: `Whisper: ${m.name}`,
           size_mb: m.size_mb,
         }));
       allModels.push(...availableWhisper);
@@ -69,7 +69,7 @@ export function useTranscriptionModels(transcriptModelConfig: TranscriptModelCon
         .map((m) => ({
           provider: 'parakeet' as const,
           name: m.name,
-          displayName: `⚡ Parakeet: ${m.name}`,
+          displayName: `Parakeet: ${m.name}`,
           size_mb: m.size_mb,
         }));
       allModels.push(...availableParakeet);

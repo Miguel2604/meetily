@@ -34,7 +34,7 @@ export function SummaryLanguageSettings() {
               key={code}
               className={`inline-flex items-center rounded-full border text-sm overflow-hidden ${
                 isPinned
-                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  ? 'bg-ink-50 border-ink-200 text-ink-800'
                   : 'bg-gray-100 border-gray-200 text-gray-800'
               }`}
             >
@@ -45,12 +45,12 @@ export function SummaryLanguageSettings() {
                 title={isPinned ? 'Click to unset as default' : 'Click to set as default'}
                 onClick={() => togglePin(code)}
                 className={`flex items-center gap-1.5 pl-3 pr-2 py-1 hover:brightness-95 active:brightness-90 ${
-                  isPinned ? 'text-blue-800' : 'text-gray-800'
+                  isPinned ? 'text-ink-800' : 'text-gray-800'
                 }`}
               >
                 <Pin
                   size={14}
-                  className={isPinned ? 'text-blue-600' : 'text-gray-400'}
+                  className={isPinned ? 'text-ink-600' : 'text-gray-400'}
                   fill={isPinned ? 'currentColor' : 'none'}
                 />
                 {labelForCode(code)}
@@ -59,7 +59,7 @@ export function SummaryLanguageSettings() {
                 type="button"
                 aria-label={`Remove ${labelForCode(code)}`}
                 onClick={() => removeRecent(code)}
-                className={`pr-2.5 pl-0.5 py-1 leading-none ${isPinned ? 'text-blue-400 hover:text-blue-700' : 'text-gray-400 hover:text-gray-700'}`}
+                className={`pr-2.5 pl-0.5 py-1 leading-none ${isPinned ? 'text-ink-400 hover:text-ink-700' : 'text-gray-400 hover:text-gray-700'}`}
               >
                 ×
               </button>

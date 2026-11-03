@@ -10,6 +10,7 @@ import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
 import { useMemo } from 'react';
+import { HomeIdle } from './HomeIdle';
 
 /**
  * TranscriptPanel Component
@@ -51,7 +52,8 @@ export function TranscriptPanel({
 
   return (
     <div ref={transcriptContainerRef} className="w-full border-r border-gray-200 bg-white flex flex-col overflow-y-auto">
-      {/* Title area - Sticky header */}
+      {/* Title area - Sticky header, only when it has controls to show */}
+      {(transcripts?.length > 0 || transcriptModelConfig.provider === "localWhisper") && (
       <div className="sticky top-0 z-10 bg-white p-4 border-gray-200">
         <div className="flex flex-col space-y-3">
           <div className="flex  flex-col space-y-2">
@@ -88,6 +90,7 @@ export function TranscriptPanel({
           </div>
         </div>
       </div>
+      )}
 
       {/* Permission Warning - Not needed on Linux */}
       {!isRecording && !isChecking && !isLinux && (
@@ -104,16 +107,20 @@ export function TranscriptPanel({
       {/* Transcript content */}
       <div className="pb-20">
         <div className="flex justify-center">
-          <div className="w-2/3 max-w-[750px]">
-            <VirtualizedTranscriptView
-              segments={segments}
-              isRecording={isRecording}
-              isPaused={isPaused}
-              isProcessing={isProcessingStop}
-              isStopping={isStopping}
-              enableStreaming={isRecording}
-              showConfidence={true}
-            />
+          <div className="w-full max-w-[720px] px-8">
+            {!isRecording && !isProcessingStop && !isStopping && segments.length === 0 ? (
+              <HomeIdle />
+            ) : (
+              <VirtualizedTranscriptView
+                segments={segments}
+                isRecording={isRecording}
+                isPaused={isPaused}
+                isProcessing={isProcessingStop}
+                isStopping={isStopping}
+                enableStreaming={isRecording}
+                showConfidence={true}
+              />
+            )}
           </div>
         </div>
       </div>

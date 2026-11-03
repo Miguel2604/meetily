@@ -604,7 +604,7 @@ function ModelCard({
       className={`
         relative rounded-lg border-2 transition-all cursor-pointer
         ${isSelected && isAvailable
-          ? 'border-blue-500 bg-blue-50'
+          ? 'border-ink-500 bg-ink-50'
           : isAvailable
             ? 'border-gray-200 hover:border-gray-300 bg-white'
             : 'border-gray-200 bg-gray-50'
@@ -617,7 +617,7 @@ function ModelCard({
     >
       {/* Recommended Badge */}
       {isRecommended && (
-        <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+        <div className="absolute -top-2 -right-2 bg-ink-600 text-white text-xs px-2 py-0.5 rounded-full font-medium">
           Recommended
         </div>
       )}
@@ -635,7 +635,7 @@ function ModelCard({
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
+                  className="bg-ink-600 text-white px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
                 >
                   ✓
                 </motion.span>
@@ -655,15 +655,15 @@ function ModelCard({
             {/* Model Specs */}
             <div className="flex items-center space-x-4 text-sm text-gray-600 ml-9 mt-1.5">
               <span className="flex items-center space-x-1">
-                <span>📦</span>
+                
                 <span>{formatFileSize(model.size_mb)}</span>
               </span>
               <span className="flex items-center space-x-1">
-                <span>🎯</span>
+                
                 <span>{model.accuracy} accuracy</span>
               </span>
               <span className="flex items-center space-x-1">
-                <span>⚡</span>
+                
                 <span>{model.speed} processing</span>
               </span>
             </div>
@@ -706,7 +706,7 @@ function ModelCard({
                   e.stopPropagation();
                   onDownload();
                 }}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                className="bg-ink-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-ink-700 transition-colors"
               >
                 Download
               </button>
@@ -740,7 +740,7 @@ function ModelCard({
                     e.stopPropagation();
                     onDownload();
                   }}
-                  className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                  className="bg-ink-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-ink-700 transition-colors"
                 >
                   Re-download
                 </button>
@@ -759,11 +759,11 @@ function ModelCard({
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-blue-600">
+                <span className="text-sm font-medium text-ink-600">
                   {isCancelling ? 'Cancelling…' : 'Downloading...'}
                 </span>
                 {!isCancelling && (
-                  <span className="text-sm font-semibold text-blue-600">{Math.round(downloadProgress)}%</span>
+                  <span className="text-sm font-semibold text-ink-600">{Math.round(downloadProgress)}%</span>
                 )}
               </div>
               {isCancelling ? (
@@ -785,7 +785,7 @@ function ModelCard({
             </div>
             <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
+                className="h-full bg-signal rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${downloadProgress}%` }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
