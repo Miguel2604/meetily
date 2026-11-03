@@ -96,7 +96,7 @@ impl SettingsRepository {
         let query = format!(
             r#"
             INSERT INTO settings (id, provider, model, whisperModel, "{}")
-            VALUES ('1', 'openai', 'gpt-4o-2024-11-20', 'large-v3', $1)
+            VALUES ('1', 'openai', 'gpt-6.1-sol', 'large-v3', $1)
             ON CONFLICT(id) DO UPDATE SET
                 "{}" = $1
             "#,

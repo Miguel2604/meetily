@@ -76,29 +76,25 @@ interface GroqModel {
 
 // Fallback models for when API fetch fails or no API key provided
 const OPENAI_FALLBACK_MODELS = [
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-4',
-  'gpt-3.5-turbo',
-  'o1',
-  'o1-mini',
-  'o3',
-  'o3-mini',
+  'gpt-6-astra',
+  'gpt-6.1-sol',
+  'gpt-6.1-terra',
+  'gpt-6-luna',
+  'gpt-5.5',
 ];
 
 const CLAUDE_FALLBACK_MODELS = [
-  'claude-sonnet-4-5-20250929',
-  'claude-haiku-4-5-20251001',
-  'claude-opus-4-5-20251101',
-  'claude-3-5-sonnet-latest',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
+  'claude-fable-5-1',
 ];
 
 const GROQ_FALLBACK_MODELS = [
+  'openai/gpt-oss-120b',
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
-  'mixtral-8x7b-32768',
-  'gemma2-9b-it',
+  'openai/gpt-oss-20b',
+  'llama-3.1-8b-instant',
 ];
 
 interface ModelSettingsModalProps {
@@ -967,7 +963,7 @@ export function ModelSettingsModal({
                 id="custom-model"
                 value={customOpenAIModel}
                 onChange={(e) => setCustomOpenAIModel(e.target.value)}
-                placeholder="gpt-4, llama-3-70b, etc."
+                placeholder="gpt-6.1-sol, llama-3.3-70b, etc."
                 className="mt-1"
               />
               <p className="text-xs text-muted-foreground mt-1">

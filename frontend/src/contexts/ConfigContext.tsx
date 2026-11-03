@@ -369,10 +369,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   // Calculate model options based on available models
   const modelOptions: Record<ModelConfig['provider'], string[]> = {
     ollama: models.map(model => model.name),
-    claude: ['claude-3-5-sonnet-latest'],
-    groq: ['llama-3.3-70b-versatile'],
+    claude: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+    groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'],
     openrouter: [],
-    openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    openai: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra'],
     'builtin-ai': [],
     'custom-openai': [],
   };
