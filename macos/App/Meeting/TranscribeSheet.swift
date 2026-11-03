@@ -134,8 +134,11 @@ final class TranscribeSheet: NSViewController {
             } catch is CancellationError {
                 self?.finish(nil)
             } catch {
+                self?.task = nil // Cancel now closes the sheet
                 self?.status.stringValue = "An error occurred: \(error)"
                 self?.run.isEnabled = true
+                self?.language.isEnabled = true
+                self?.engine.isEnabled = true
                 self?.titleField.isEnabled = true
                 self?.progress.isHidden = true
             }
