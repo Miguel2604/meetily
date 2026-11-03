@@ -124,7 +124,7 @@ Types:
 
 - Write unit tests for new features
 - Update existing tests when modifying code
-- Ensure all tests pass before submitting PR
+- Ensure all tests pass before submitting PR (`macos/scripts/test.sh`)
 - Include integration tests for complex features
 
 ## Documentation

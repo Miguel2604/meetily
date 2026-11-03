@@ -1,9 +1,0 @@
-{
-  "bundle": {
-    "externalBin": [
-      "binaries/llama-helper",
-      "binaries/ffmpeg",
-      "binaries/asr-helper"
-    ]
-  }
-}

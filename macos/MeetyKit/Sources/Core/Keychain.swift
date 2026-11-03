@@ -44,7 +44,7 @@ public struct Keychain: Sendable {
     }
 
     /// Copies keys from the `settings` row into the keychain, skipping providers that already have one.
-    /// The plaintext columns are left untouched until cutover (D10). Returns how many keys were copied.
+    /// The plaintext columns are left untouched (D10). TODO(cutover): clear them; the SQL is in README.md. Returns how many keys were copied.
     /// Off the main actor: a keychain read can block on an access prompt.
     @concurrent public func importKeys(from store: Store) async throws -> Int {
         guard let row = try await store.modelConfig() else { return 0 }

@@ -9,7 +9,7 @@ Meety is built on the principle that your meeting data should remain private and
 ## Data Processing Philosophy
 
 ### Local-First Processing
-- **Meeting transcription**: Processed entirely on your device using local Whisper models
+- **Meeting transcription**: Processed entirely on your device using local Parakeet and Whisper models
 - **Audio recordings**: Never transmitted to external servers
 - **Meeting content**: Remains on your infrastructure
 - **AI summaries**: Generated locally or through your chosen LLM provider
@@ -22,45 +22,7 @@ Meety is built on the principle that your meeting data should remain private and
 
 ## Usage Analytics
 
-### What We Collect
-Usage analytics is optional and off by default. When you choose to enable it, Meety collects minimal, anonymized usage data:
-
-**Application Usage:**
-- Feature usage patterns (which tools you use most)
-- Session duration and frequency
-- Performance metrics (transcription success rates, error frequencies)
-- UI interaction patterns (button clicks, navigation flows)
-
-**Technical Metrics:**
-- Application version and platform information
-- Error logs and crash reports (anonymized)
-- Performance benchmarks (processing times, resource usage)
-
-### What We DON'T Collect
-We never collect:
-- ❌ Meeting content, transcripts, or recordings
-- ❌ Personal information or identifiable data
-- ❌ File names, meeting titles, or metadata
-- ❌ Audio data or voice patterns
-- ❌ Participant names or contact information
-- ❌ LLM conversations or AI-generated content
-
-### Why We Collect This Data
-When enabled, analytics helps us with:
-- **Product Quality**: Identifying and fixing bugs that impact user experience
-- **Performance Optimization**: Understanding resource usage and system bottlenecks
-- **Security**: Detecting potential security issues and vulnerabilities
-- **Feature Development**: Making data-driven decisions about new features
-- **Open Source Sustainability**: Ensuring the project meets user needs effectively
-
-### Analytics Implementation
-- **Provider**: PostHog (privacy-focused analytics platform)
-- **Default**: Off by default; analytics starts only after you enable it in settings
-- **Anonymization**: All data linked to generated user IDs only - no personal identification
-- **Data retention**: 12 months maximum, then automatically deleted
-- **Encryption**: All data encrypted in transit using industry-standard protocols
-- **Location**: Data processed in accordance with PostHog's privacy policy
-- **Access Control**: Strictly limited to core development team members
+Meety collects no usage analytics. Nothing about how you use the app leaves your Mac.
 
 ## Third-Party Services
 
@@ -68,12 +30,9 @@ When enabled, analytics helps us with:
 If you choose to use external LLM providers:
 - **Anthropic Claude**: Subject to Anthropic's privacy policy
 - **Groq**: Subject to Groq's privacy policy
-- **Local Ollama**: Processed entirely on your device
-
-### Analytics Service (Optional)
-- **PostHog**: Used for usage analytics when enabled
-- **Data**: Only anonymized usage patterns, no meeting content
-- **Control**: Completely optional, off by default, and user-controlled
+- **OpenAI, OpenRouter, custom OpenAI-compatible endpoints, ChatGPT via the Codex CLI**: Subject to each provider's privacy policy
+- **Local Ollama and the built-in model**: Processed entirely on your device
+- **API keys**: Stored in the macOS Keychain
 
 ## Your Privacy Rights
 
@@ -82,11 +41,6 @@ If you choose to use external LLM providers:
 - **Export**: Export your data in standard formats
 - **Delete**: Remove all data from your device
 
-
-### Analytics Transparency
-- **Open source**: Full analytics implementation available for review in our source code
-- **Opt-in**: New and existing installs have analytics disabled until you turn it on
-- **Questions**: Contact us for any analytics-related concerns
 
 ## Data Security
 

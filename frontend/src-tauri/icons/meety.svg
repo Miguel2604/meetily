@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Meety app icon source: a three-bar voice level in an ink square. Regenerate icons with `pnpm tauri icon`. -->
-  <rect x="100" y="100" width="824" height="824" rx="185" fill="#141414"/>
-  <rect x="284" y="362" width="104" height="300" rx="52" fill="#ffffff"/>
-  <rect x="460" y="252" width="104" height="520" rx="52" fill="#5b93e8"/>
-  <rect x="636" y="322" width="104" height="380" rx="52" fill="#ffffff"/>
-</svg>
