@@ -46,7 +46,7 @@ public final class LiveMicrophone: AudioSource {
         watchers.withLock { $0.forEach { $0.cancel() }; $0 = [] }
         recheckSink.finish()
         noticeSink.finish()
-        state.withLock { $0.capture?.stop(); $0.capture = nil }
+        state.withLock { $0.capture?.stop() } // kept, so the session's final drain still gets its samples
     }
 
     /// Re-resolves the device; restarts the capture when it changed (or `force`, after a configuration change).

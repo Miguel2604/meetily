@@ -81,6 +81,7 @@ public actor RecordingSession {
     private var backlog = 0.0
     private var warnedBacklog = false
     private var dropped = 0
+    private var unwritten = 0
 
     public init(title: String, folder: URL, store: Store, engine: any TranscriptionEngine, detector: any VoiceDetector,
                 microphone: (any AudioSource)?, system: (any AudioSource)?,
@@ -122,7 +123,11 @@ public actor RecordingSession {
         }
     }
 
-    public func pause() {
+    /// Writes and transcribes what was captured before the pause, then cuts until `resume`.
+    public func pause() async {
+        guard !paused else { return }
+        await tick()
+        do { try await feed(mixer.flush()) } catch { warn("Voice detection failed: \(error)") }
         paused = true
         writer.pause()
     }
@@ -141,8 +146,12 @@ public actor RecordingSession {
         microphone?.stop()
         system?.stop()
         await tick() // whatever the captures still held
-        if !paused { try await feed(mixer.flush()) }
-        queue(try await segment { try await $0.flush() })
+        do { // the recording and transcript so far are saved even if voice detection fails here
+            if !paused { try await feed(mixer.flush()) }
+            queue(try await segment { try await $0.flush() })
+        } catch {
+            warn("Voice detection failed: \(error)")
+        }
         speech.finish()
         await asr?.value
         try await writer.finish()
@@ -178,7 +187,10 @@ public actor RecordingSession {
 
     private func feed(_ window: [Float]) async throws {
         guard !window.isEmpty else { return }
-        writer.append(window)
+        if !writer.append(window) {
+            unwritten += window.count
+            if unwritten == window.count { warn("The recording file stopped accepting audio; the transcript continues") }
+        }
         let audio = resampler.process(window)
         queue(try await segment { try await $0.process(audio) })
     }

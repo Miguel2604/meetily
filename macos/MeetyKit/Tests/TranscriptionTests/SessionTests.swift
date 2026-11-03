@@ -78,6 +78,12 @@ func silence(_ seconds: Double, rate: Double = 16_000) -> [Float] { [Float](repe
     }
 }
 
+struct FailingDetector: VoiceDetector {
+    struct Failure: Error {}
+    var frameSize: Int { 480 }
+    func speechProbability(_ frame: [Float]) async throws -> Float { throw Failure() }
+}
+
 /// Answers "words:<seconds>" per chunk, optionally slowly.
 final class FakeEngine: TranscriptionEngine {
     let prefix: String
@@ -127,6 +133,33 @@ func tempStore() throws -> Store { try Store(path: tempDir().appending(path: "me
         let texts = events.compactMap { if case .segment(let s) = $0 { s.text } else { nil } }
         #expect(texts == ["words 2.7", "words 2.2"])
         #expect(events.last == .saved(id))
+    }
+
+    @Test func `pausing keeps audio captured before the pause`() async throws {
+        let store = try tempStore()
+        let folder = tempDir().appending(path: "PauseStop")
+        let mic = SampleSource(samples: tone(0.3, rate: 48_000), chunk: 4_800) // less than one mixer window
+        let session = try RecordingSession(title: "PauseStop", folder: folder, store: store, engine: FakeEngine(),
+                                           detector: EnergyDetector(), microphone: mic, system: nil)
+        await session.start()
+        while !mic.isFinished { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(60)) // one more poll drains the source
+        await session.pause()
+        _ = try await session.stop()
+        let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "metadata.json"))) as! [String: Any]
+        #expect(abs((metadata["duration_seconds"] as? Double ?? 0) - 0.3) < 0.01)
+    }
+
+    @Test func `a voice detection failure on stop still saves the recording`() async throws {
+        let store = try tempStore()
+        let folder = tempDir().appending(path: "VADFails")
+        let mic = SampleSource(samples: meeting, chunk: 24_000)
+        let session = try RecordingSession(title: "VADFails", folder: folder, store: store, engine: FakeEngine(),
+                                           detector: FailingDetector(), microphone: mic, system: nil)
+        let id = try await run(session, until: mic)
+        #expect(try await store.meeting(id: id) != nil)
+        let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "metadata.json"))) as! [String: Any]
+        #expect(metadata["status"] as? String == "completed")
     }
 
     @Test func `audio captured while paused is left out`() async throws {

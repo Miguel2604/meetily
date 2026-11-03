@@ -56,13 +56,16 @@ public final class RecordingWriter {
     public func resume() { paused = false }
 
     /// Appends 48 kHz mono samples; ignored while paused, so pauses are cut from the file.
-    public func append(_ samples: [Float]) {
-        guard !paused, !samples.isEmpty, writer.status == .writing else { return }
-        guard let buffer = try? sampleBuffer(samples) else { return }
+    /// Returns false when the samples could not be written (encoder backed up, disk or writer failure).
+    @discardableResult public func append(_ samples: [Float]) -> Bool {
+        guard !paused, !samples.isEmpty else { return true }
+        guard writer.status == .writing, let buffer = try? sampleBuffer(samples) else { return false }
         // Real-time inputs are normally ready; give the encoder a moment rather than dropping audio.
         var waits = 0
         while !input.isReadyForMoreMediaData && waits < 50 { Thread.sleep(forTimeInterval: 0.002); waits += 1 }
-        if input.append(buffer) { writtenFrames += Int64(samples.count) }
+        guard input.append(buffer) else { return false }
+        writtenFrames += Int64(samples.count)
+        return true
     }
 
     private func sampleBuffer(_ samples: [Float]) throws -> CMSampleBuffer {
