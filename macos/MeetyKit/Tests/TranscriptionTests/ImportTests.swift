@@ -70,6 +70,19 @@ func json(_ url: URL) throws -> [String: Any] {
         #expect(metadata["audio_file"] as? String == "audio.wav")
     }
 
+    @Test func `importing the same title twice keeps both folders`() async throws {
+        let store = try tempStore()
+        let source = try meetingWAV()
+        let first = try await OfflineTranscription.importAudio(source, title: "Twice", recordingsFolder: recordings, store: store,
+                                                               engine: FakeEngine(), detector: EnergyDetector())
+        let second = try await OfflineTranscription.importAudio(source, title: "Twice", recordingsFolder: recordings, store: store,
+                                                                engine: FakeEngine(), detector: EnergyDetector())
+        let folders = [try #require(try await store.meeting(id: first.meetingID)?.folderPath),
+                       try #require(try await store.meeting(id: second.meetingID)?.folderPath)]
+        #expect(folders[0] != folders[1])
+        #expect(folders.allSatisfy { FileManager.default.fileExists(atPath: $0 + "/audio.wav") })
+    }
+
     @Test func `cancelling an import leaves no folder and no meeting`() async throws {
         let store = try tempStore()
         let source = try meetingWAV()
@@ -122,3 +135,4 @@ func json(_ url: URL) throws -> [String: Any] {
         }
     }
 }
+

@@ -79,9 +79,8 @@ public enum OfflineTranscription {
     ) async throws -> ImportResult {
         try validate(source)
         progress(Progress(stage: .copying, fraction: 0))
-        let folder = Paths.meetingFolder(base: recordingsFolder, name: title)
+        let folder = try createFolder(Paths.meetingFolder(base: recordingsFolder, name: title))
         let audioFile = "audio.\(source.pathExtension.lowercased())"
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let segments: [NewSegment]
         let duration: Double
         do {
@@ -134,6 +133,19 @@ public enum OfflineTranscription {
         }
         progress(Progress(stage: .complete, fraction: 1))
         return segments.count
+    }
+
+    /// Creates `folder`, or `folder (2)`, `(3)`… when it exists, so a failed import only removes its own folder.
+    static func createFolder(_ folder: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: folder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        for n in 1... {
+            let candidate = n == 1 ? folder : folder.deletingLastPathComponent().appending(path: "\(folder.lastPathComponent) (\(n))", directoryHint: .isDirectory)
+            do {
+                try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: false)
+                return candidate
+            } catch CocoaError.fileWriteFileExists {}
+        }
+        fatalError("unreachable")
     }
 
     /// The recording in a meeting folder, by the names the Tauri app used, then any decodable file.
