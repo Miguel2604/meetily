@@ -57,9 +57,10 @@ for (const [, base, artifacts] of parakeet.matchAll(
   /source_base_url: "(https:[^"]+)",\s*artifacts: (\w+),/g,
 )) {
   const block = parakeet.match(new RegExp(`const ${artifacts}: &\\[ArtifactSpec\\] = &\\[([\\s\\S]*?)\\n\\];`))[1];
-  for (const entry of block.matchAll(/filename: "([^"]+)"[^}]*?source_url: (None|Some\("([^"]+)"\))/g)) {
-    urls.push(entry[3] ?? `${base}/${entry[1]}`);
-  }
+  const entries = [...block.matchAll(/filename: "([^"]+)"[^}]*?source_url: (None|Some\(\s*"([^"]+)"\s*\))/g)];
+  // A parse miss must fail loudly, never shrink the set of checked URLs.
+  if (entries.length !== block.split('ArtifactSpec {').length - 1) throw new Error(`Could not parse every artifact in ${artifacts}`);
+  for (const entry of entries) urls.push(entry[3] ?? `${base}/${entry[1]}`);
 }
 for (const file of catalogFiles) urls.push(`https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${file}`);
 for (const [, url] of builtin.matchAll(/download_url: "(https:[^"]+)"/g)) urls.push(url);
