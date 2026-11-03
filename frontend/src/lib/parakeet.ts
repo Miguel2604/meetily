@@ -10,7 +10,7 @@ export interface ParakeetModelInfo {
   quantization: QuantizationType;
 }
 
-export type QuantizationType = 'FP32' | 'Int8' | 'Ternary';
+export type QuantizationType = 'Int8' | 'Palettized';
 export type ModelAccuracy = 'High' | 'Good' | 'Decent';
 export type ProcessingSpeed = 'Slow' | 'Medium' | 'Fast' | 'Very Fast' | 'Ultra Fast';
 
@@ -52,23 +52,17 @@ export interface ModelDisplayInfo {
 }
 
 export const MODEL_DISPLAY_CONFIG: Record<string, ModelDisplayInfo> = {
-  'parakeet-tdt-0.6b-v3-int8': {
-    friendlyName: 'Lightning',
-    icon: '⚡',
-    tagline: 'Real time • Best for speed, great accuracy',
+  'parakeet-ultra': {
+    friendlyName: 'Ultra',
+    icon: '🎯',
+    tagline: 'Neural Engine • Most accurate for English meetings',
     recommended: true,
-    tier: 'fastest'
+    tier: 'precise'
   },
-  'parakeet-tdt-0.6b-v2-int8': {
-    friendlyName: 'Compact',
-    icon: '📦',
-    tagline: 'Real time • Smaller size',
-    tier: 'balanced'
-  },
-  'parakeet-redux-0.6b-v3': {
-    friendlyName: 'Redux',
-    icon: '🪶',
-    tagline: 'Real time • Smallest download, 25 languages',
+  'phonon-2': {
+    friendlyName: 'Phonon-2',
+    icon: '⚡',
+    tagline: 'Neural Engine • Smallest and fastest, English only',
     tier: 'fastest'
   }
 };
@@ -109,32 +103,16 @@ export function formatFileSize(sizeMb: number): string {
   return `${sizeMb}MB`;
 }
 
-// Helper function to check if model is quantized
-export function isQuantizedModel(modelName: string): boolean {
-  return modelName.includes('int8');
-}
-
 // Helper function to get model performance badge
 export function getModelPerformanceBadge(quantization: QuantizationType): { label: string; color: string } {
   switch (quantization) {
-    case 'FP32':
-      return { label: 'Full Precision', color: 'blue' };
     case 'Int8':
       return { label: 'Int8 Quantized', color: 'green' };
-    case 'Ternary':
-      return { label: 'Ternary Compressed', color: 'green' };
+    case 'Palettized':
+      return { label: 'Palettized', color: 'green' };
     default:
       return { label: 'Standard', color: 'gray' };
   }
-}
-
-export function getRecommendedModel(systemSpecs?: { ram: number; cores: number }): string {
-  // Default to Int8 quantized model (fastest)
-  if (!systemSpecs) return 'parakeet-tdt-0.6b-v3-int8';
-
-  // For any system, prefer Int8 for speed
-  // FP32 can be used if user explicitly wants higher precision
-  return 'parakeet-tdt-0.6b-v3-int8';
 }
 
 // Tauri command wrappers for Parakeet backend

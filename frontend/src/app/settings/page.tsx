@@ -12,6 +12,7 @@ import { SummaryModelSettings } from '@/components/SummaryModelSettings';
 import { BetaSettings } from '@/components/BetaSettings';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DEFAULT_WHISPER_MODEL } from '@/constants/modelDefaults';
 
 // Tabs configuration (constant)
 const TABS = [
@@ -40,7 +41,7 @@ export default function SettingsPage() {
           console.log('Loaded saved transcript config:', config);
           setTranscriptModelConfig({
             provider: config.provider || 'localWhisper',
-            model: config.model || 'large-v3',
+            model: config.model || DEFAULT_WHISPER_MODEL,
             apiKey: config.apiKey || null
           });
         }

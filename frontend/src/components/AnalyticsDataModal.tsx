@@ -125,7 +125,7 @@ export default function AnalyticsDataModal({ isOpen, onClose, onConfirmDisable }
   "event": "meeting_ended",
   "app_version": "0.4.1",
   "transcription_provider": "parakeet",
-  "transcription_model": "parakeet-tdt-0.6b-v3-int8",
+  "transcription_model": "parakeet-ultra",
   "summary_provider": "ollama",
   "summary_model": "llama3.2:latest",
   "total_duration_seconds": "125.5",

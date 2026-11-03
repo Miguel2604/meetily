@@ -5,15 +5,15 @@
 
 /**
  * Default Whisper model for transcription when no preference is configured.
- * This is the recommended balance of accuracy and speed.
+ * Best local model for Tagalog/Taglish; its encoder runs on the Neural Engine.
  */
-export const DEFAULT_WHISPER_MODEL = 'large-v3-turbo';
+export const DEFAULT_WHISPER_MODEL = 'large-v3-turbo-q8_0';
 
 /**
  * Default Parakeet model for transcription when no preference is configured.
- * This is the quantized version optimized for speed.
+ * Parakeet Ultra on the Neural Engine, the most accurate English model.
  */
-export const DEFAULT_PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8';
+export const DEFAULT_PARAKEET_MODEL = 'parakeet-ultra';
 
 /**
  * Model defaults by provider type

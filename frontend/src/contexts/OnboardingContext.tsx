@@ -6,8 +6,9 @@ import { listen } from '@tauri-apps/api/event';
 import type { PermissionStatus, OnboardingPermissions } from '@/types/onboarding';
 import { resolveOnboardingSummaryModelStatus } from '@/lib/onboarding-summary-model';
 import type { ParakeetDownloadProgressEvent } from '@/lib/parakeet';
+import { DEFAULT_PARAKEET_MODEL } from '@/constants/modelDefaults';
 
-const PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8';
+const PARAKEET_MODEL = DEFAULT_PARAKEET_MODEL;
 
 interface OnboardingStatus {
   version: string;

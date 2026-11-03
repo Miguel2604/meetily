@@ -31,6 +31,7 @@ import Info from '../Info';
 import { ComplianceNotification } from '../ComplianceNotification';
 import { Input } from '../ui/input';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../ui/input-group';
+import { DEFAULT_PARAKEET_MODEL } from '@/constants/modelDefaults';
 
 interface SidebarItem {
   id: string;
@@ -73,7 +74,7 @@ const Sidebar: React.FC = () => {
   });
   const [transcriptModelConfig, setTranscriptModelConfig] = useState<TranscriptModelProps>({
     provider: 'parakeet',
-    model: 'parakeet-tdt-0.6b-v3-int8',
+    model: DEFAULT_PARAKEET_MODEL,
   });
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<boolean | null>(null);
 

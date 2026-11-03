@@ -14,6 +14,9 @@ import {
   WhisperAPI
 } from '../lib/whisper';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { DEFAULT_WHISPER_MODEL } from '@/constants/modelDefaults';
+
+const basicModelNames = [DEFAULT_WHISPER_MODEL];
 
 interface ModelManagerProps {
   selectedModel?: string;
@@ -444,14 +447,9 @@ export function ModelManager({
 
   const getDisplayName = (modelName: string): string => {
     const modelNameMapping: { [key: string]: string } = {
-      "small": "Small",
-      "medium-q5_0": "Medium",
-      "large-v3-q5_0": "Large V3 Compressed",
-      "large-v3-turbo": "Large V3 Turbo",
-      "large-v3": "Large V3"
+      [DEFAULT_WHISPER_MODEL]: "Large V3 Turbo (Tagalog / Taglish)",
     };
 
-    const basicModelNames = ["small", "medium-q5_0", "large-v3-q5_0", "large-v3-turbo", "large-v3"];
     if (basicModelNames.includes(modelName)) {
       return modelNameMapping[modelName] || modelName;
     }
@@ -479,7 +477,6 @@ export function ModelManager({
     );
   }
 
-  const basicModelNames = ["small", "medium-q5_0", "large-v3-q5_0", "large-v3-turbo", "large-v3"];
   const basicModels = models.filter(m => basicModelNames.includes(m.name))
     .sort((a, b) => basicModelNames.indexOf(a.name) - basicModelNames.indexOf(b.name));
   const advancedModels = models.filter(m => !basicModelNames.includes(m.name));
@@ -489,7 +486,7 @@ export function ModelManager({
       {/* Basic Models */}
       <div className="space-y-3">
         {basicModels.map((model) => {
-          const isRecommended = model.name === 'base';
+          const isRecommended = model.name === DEFAULT_WHISPER_MODEL;
           return (
             <ModelCard
               key={model.name}
