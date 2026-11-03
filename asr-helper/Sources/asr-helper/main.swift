@@ -82,12 +82,17 @@ case "serve":
     while let header = readExactly(4) {
         let count = Int(header.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.littleEndian)
         guard count <= maxSamples, let body = readExactly(count * 4) else { fail("bad frame (\(count) samples)") }
-        let samples = body.withUnsafeBytes { raw in
+        var samples = body.withUnsafeBytes { raw in
             (0..<count).map { Float(bitPattern: raw.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self).littleEndian) }
         }
         if samples.isEmpty {
             emit(["text": ""])
             continue
+        }
+        // FluidAudio rejects chunks under 0.3 s as invalidAudioData; pad short VAD chunks with silence instead.
+        let minSamples = ASRConstants.minimumRequiredSamples(forSampleRate: 16_000)
+        if samples.count < minSamples {
+            samples += [Float](repeating: 0, count: minSamples - samples.count)
         }
         do {
             // Each frame is an independent speech chunk, so it starts from a fresh decoder state.
