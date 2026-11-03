@@ -3,6 +3,7 @@ import { Lock, Sparkles, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OnboardingContainer } from '../OnboardingContainer';
 import { useOnboarding } from '@/contexts/OnboardingContext';
+import { MeetyMark } from '@/components/MeetyMark';
 
 export function WelcomeStep() {
   const { goNext } = useOnboarding();
@@ -14,7 +15,7 @@ export function WelcomeStep() {
     },
     {
       icon: Sparkles,
-      title: 'Intelligent summaries & insights',
+      title: 'Notes and action items written for you',
     },
     {
       icon: Cpu,
@@ -29,36 +30,30 @@ export function WelcomeStep() {
       step={1}
       hideProgress={true}
     >
-      <div className="flex flex-col items-center space-y-10">
-        {/* Divider */}
-        <div className="w-16 h-px bg-gray-300" />
+      <div className="flex flex-col items-center space-y-8">
+        <MeetyMark size={56} />
 
-        {/* Features Card */}
-        <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-sm p-6 space-y-4">
-          {features.map((feature, index) => {
+        <ul className="w-full max-w-md bg-white rounded-lg border border-gray-200 px-6 py-5 space-y-3.5">
+          {features.map((feature) => {
             const Icon = feature.icon;
             return (
-              <div key={index} className="flex items-start gap-3">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Icon className="w-3 h-3 text-gray-700" />
-                  </div>
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{feature.title}</p>
-              </div>
+              <li key={feature.title} className="flex items-center gap-3 text-[15px] text-gray-900">
+                <Icon className="w-4 h-4 text-gray-600 flex-shrink-0" strokeWidth={1.75} />
+                {feature.title}
+              </li>
             );
           })}
-        </div>
+        </ul>
 
         {/* CTA Section */}
         <div className="w-full max-w-xs space-y-3">
           <Button
             onClick={goNext}
-            className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white"
+            className="w-full h-11 bg-gray-950 hover:bg-gray-800 text-white"
           >
             Get Started
           </Button>
-          <p className="text-xs text-center text-gray-500">Takes less than 3 minutes</p>
+          <p className="text-sm text-center text-gray-600">Takes less than 3 minutes</p>
         </div>
       </div>
     </OnboardingContainer>
