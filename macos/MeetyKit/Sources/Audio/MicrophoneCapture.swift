@@ -27,13 +27,15 @@ public final class MicrophoneCapture: @unchecked Sendable { // start/stop/drain 
     public var droppedSamples: Int { ring.droppedSamples }
 
     /// Starts on `device`, or the system default input when nil.
-    /// `voiceProcessing` turns on Apple's echo cancellation and noise suppression (S6).
-    public func start(device: AudioDevice?, voiceProcessing: Bool = false) throws {
+    /// `voiceProcessing` turns on Apple's echo cancellation and noise suppression, with other-audio
+    /// ducking at its minimum; when it cannot be enabled the mic records unprocessed.
+    /// shortcut: chosen without an A/B on real meetings (the fixtures are files, voice processing acts on live
+    /// input only, and the Tauri app ran with RNNoise off); vendor RNNoise if it degrades the mic.
+    public func start(device: AudioDevice?, voiceProcessing: Bool = true) throws {
         stop()
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        if voiceProcessing {
-            try input.setVoiceProcessingEnabled(true)
+        if voiceProcessing, (try? input.setVoiceProcessingEnabled(true)) != nil {
             input.voiceProcessingOtherAudioDuckingConfiguration = .init(enableAdvancedDucking: false, duckingLevel: .min)
         }
         if let device, let unit = input.audioUnit {
@@ -75,7 +77,10 @@ public final class MicrophoneCapture: @unchecked Sendable { // start/stop/drain 
             self?.onConfigurationChange?()
         }
         engine.prepare()
-        try engine.start()
+        // A just-stopped voice-processing unit releases the device asynchronously ('!dev'); retry briefly.
+        for attempt in 1...4 {
+            do { try engine.start(); break } catch where attempt < 4 { Thread.sleep(forTimeInterval: 0.25) }
+        }
         self.ring = ring
         self.resampler = try Resampler(from: format.sampleRate, to: Self.sampleRate)
         self.engine = engine
@@ -93,6 +98,8 @@ public final class MicrophoneCapture: @unchecked Sendable { // start/stop/drain 
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
         engine.stop()
+        // Leaving voice processing on keeps the VPIO unit holding the device, and the next engine gets no input.
+        if engine.inputNode.isVoiceProcessingEnabled { try? engine.inputNode.setVoiceProcessingEnabled(false) }
         self.engine = nil
     }
 

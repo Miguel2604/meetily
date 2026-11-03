@@ -107,7 +107,7 @@ func sine(_ hz: Double, seconds: Double, rate: Double, amplitude: Float = 0.5) -
     }
 }
 
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
 struct RealDeviceTests {
     @Test func `lists devices and a default input`() {
         #expect(!AudioDevices.inputs().isEmpty)
@@ -115,19 +115,20 @@ struct RealDeviceTests {
         #expect(AudioDevices.defaultOutput() != nil)
     }
 
-    @Test func `microphone delivers 48 kHz frames`() async throws {
+    @Test(arguments: [true, false, true])
+    func `microphone delivers 48 kHz frames`(voiceProcessing: Bool) async throws {
         let mic = MicrophoneCapture()
-        try mic.start(device: nil)
+        try mic.start(device: nil, voiceProcessing: voiceProcessing)
         try await Task.sleep(for: .seconds(1))
         let samples = mic.drain()
         mic.stop()
-        #expect(samples.count > 40_000)
+        #expect(samples.count > 40_000, "got \(samples.count) samples, dropped \(mic.droppedSamples)")
     }
 }
 
 let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Fixtures").standardized
 
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
 struct RealSystemAudioTests {
     @Test func `tap hears afplay`() async throws {
         let capture = SystemAudioCapture()
