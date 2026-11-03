@@ -342,6 +342,7 @@ public actor SummaryService {
             guard let stored = apiKey(provider.rawValue), !stored.isEmpty else { throw .message("API key not found for \(providerID)") }
             key = stored
         }
+        if provider == .ollama { key = apiKey(provider.rawValue) ?? "" } // optional, for an authenticated remote Ollama
         let config = try? await store.modelConfig()
         let ollamaEndpoint = provider == .ollama ? config?.ollamaEndpoint.flatMap { $0.isEmpty ? nil : $0 } : nil
         var custom: (endpoint: String, maxTokens: Int?, temperature: Float?, topP: Float?)?
@@ -351,7 +352,7 @@ public actor SummaryService {
                 throw .message("Custom OpenAI provider selected but no configuration found")
             }
             custom = (endpoint, json["maxTokens"] as? Int, (json["temperature"] as? Double).map(Float.init), (json["topP"] as? Double).map(Float.init))
-            key = apiKey(Provider.customOpenAI.rawValue) ?? json["apiKey"] as? String ?? ""
+            key = apiKey(Provider.customOpenAI.rawValue) ?? "" // the Keychain only; the plaintext JSON key is the Tauri app's (D10)
         }
 
         // Local models get the transcript in chunks that fit their context, less 300 tokens for the prompt.
