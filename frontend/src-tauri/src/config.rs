@@ -33,4 +33,14 @@ pub const WHISPER_MODEL_CATALOG: &[(&str, &str, u32, &str, &str, &str)] = &[
     ("medium-q5_0", "ggml-medium-q5_0.bin", 514, "High", "Medium", "Quantized medium model, professional quality"),
     ("large-v3-turbo-q5_0", "ggml-large-v3-turbo-q5_0.bin", 547, "High", "Medium", "Quantized large model, best balance"),
     ("large-v3-q5_0", "ggml-large-v3-q5_0.bin", 1031, "High", "Slow", "Quantized large model, high accuracy"),
+
+    // Q8_0 quantized models (near full-precision accuracy at roughly half the size)
+    ("tiny-q8_0", "ggml-tiny-q8_0.bin", 42, "Decent", "Very Fast", "8-bit tiny model, near full-precision accuracy"),
+    ("base-q8_0", "ggml-base-q8_0.bin", 78, "Good", "Fast", "8-bit base model, near full-precision accuracy"),
+    ("small-q8_0", "ggml-small-q8_0.bin", 252, "Good", "Fast", "8-bit small model, near full-precision accuracy"),
+    ("medium-q8_0", "ggml-medium-q8_0.bin", 785, "High", "Medium", "8-bit medium model, near full-precision accuracy"),
+    ("large-v3-turbo-q8_0", "ggml-large-v3-turbo-q8_0.bin", 834, "High", "Medium", "8-bit large turbo model, near full-precision accuracy"),
 ];
+
+/// Every catalog file is served from the official whisper.cpp model repository.
+pub const WHISPER_MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
