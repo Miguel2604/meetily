@@ -54,6 +54,13 @@ func silence(_ seconds: Double, rate: Double = 16_000) -> [Float] { [Float](repe
         #expect(abs(chunks[0].end - 1.5) < 0.001)
     }
 
+    @Test func `flush ends a burst that is already in silence at the post-pad`() async throws {
+        var segmenter = SpeechSegmenter(detector: EnergyDetector(), config: .batch)
+        let chunks = try await segmenter.process(tone(1) + silence(1)) + segmenter.flush()
+        try #require(chunks.count == 1)
+        #expect(abs(chunks[0].end - 1.4) < 0.04)
+    }
+
     @Test func `continuous speech is cut at the maximum length`() async throws {
         var segmenter = SpeechSegmenter(detector: EnergyDetector(), config: .live)
         let chunks = try await segmenter.process(tone(70)) + segmenter.flush()
@@ -73,12 +80,16 @@ func silence(_ seconds: Double, rate: Double = 16_000) -> [Float] { [Float](repe
 
 /// Answers "words:<seconds>" per chunk, optionally slowly.
 final class FakeEngine: TranscriptionEngine {
+    let prefix: String
     let delay: Duration
-    init(delay: Duration = .zero) { self.delay = delay }
+    init(prefix: String = "words", delay: Duration = .zero) {
+        self.prefix = prefix
+        self.delay = delay
+    }
     func transcribe(samples: [Float]) async throws -> [Segment] {
         try await Task.sleep(for: delay)
         let seconds = Double(samples.count) / 16_000
-        return [Segment(text: String(format: "words %.1f", seconds), start: 0, end: seconds)]
+        return [Segment(text: String(format: "%@ %.1f", prefix, seconds), start: 0, end: seconds)]
     }
 }
 

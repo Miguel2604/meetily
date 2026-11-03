@@ -74,7 +74,10 @@ public struct SpeechSegmenter {
             evaluated += remainder
             if let chunk = step(p, frameStart: evaluated - remainder, frameEnd: evaluated) { chunks.append(chunk) }
         }
-        if let start = speechStart, end - start >= samples(config.minSpeech) { chunks.append(cut(start, end)) }
+        if let start = speechStart {
+            let stop = silenceStart.map { min($0 + samples(config.postPad), end) } ?? end
+            if (silenceStart ?? end) - start >= samples(config.minSpeech) { chunks.append(cut(start, stop)) }
+        }
         speechStart = nil
         silenceStart = nil
         trim(to: end)
