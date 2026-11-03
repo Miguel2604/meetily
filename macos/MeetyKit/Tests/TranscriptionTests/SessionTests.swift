@@ -170,3 +170,42 @@ struct RealVADTests {
         #expect(text.lowercased().contains("budget"))
     }
 }
+
+/// S22 measurement: a 60 s real-time session with Silero + Parakeet Ultra, printing CPU and memory.
+/// MEETY_PERF=1 swift test -c release --filter SessionPerformance
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_PERF"] == "1"))
+struct SessionPerformanceTests {
+    @Test func `live session cpu and memory`() async throws {
+        let vad = try await VoiceModel.load(directory: Paths.models.appending(path: "vad"))
+        let engine = try await ParakeetModels(directory: Paths.parakeetModels).engine(.ultra)
+        let line = try spokenSamples("We reviewed the quarterly budget and agreed to move the launch to Friday after the design review.", rate: 48_000)
+        var audio: [Float] = []
+        while audio.count < 60 * 48_000 { audio += line + silence(2, rate: 48_000) }
+        let store = try tempStore()
+        let mic = SampleSource(samples: audio, chunk: 960) // 20 ms per 20 ms poll: real time
+        let session = try RecordingSession(title: "Perf", folder: tempDir().appending(path: "Perf"), store: store,
+                                           engine: engine, detector: vad.detector(), microphone: mic, system: nil)
+        let (cpu0, wall0) = (cpuSeconds(), Date())
+        await session.start()
+        while !mic.isFinished { try await Task.sleep(for: .milliseconds(50)) }
+        let id = try await session.stop()
+        let wall = Date().timeIntervalSince(wall0)
+        let cpu = cpuSeconds() - cpu0
+        print(String(format: "session %.1f s wall, %.1f s CPU = %.1f%% of one core, footprint %.0f MB, %d segments",
+                     wall, cpu, 100 * cpu / wall, footprintMB(), try await store.transcripts(meetingID: id).count))
+        #expect(try await !store.transcripts(meetingID: id).isEmpty)
+    }
+
+    func cpuSeconds() -> Double {
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1e6
+    }
+
+    func footprintMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        _ = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) } }
+        return Double(info.phys_footprint) / 1_048_576
+    }
+}

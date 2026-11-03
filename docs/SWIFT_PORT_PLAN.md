@@ -134,3 +134,19 @@ UI talks to MeetyKit through `@MainActor @Observable` model objects observed wit
 - [ ] Recordings folder preference; notification settings
 - [ ] Onboarding and permissions; menu bar item
 - [ ] Existing meetings, summaries, models and settings from the Tauri app all show up untouched
+
+## S22 results (2026-11-04, unattended)
+
+Measured on the M5 against a copy of the data (`MEETY_DATA_DIR`):
+
+| Target | Result |
+|---|---|
+| Window visible < 300 ms after a warm launch | 235–249 ms, Release, Developer ID signed (logged as `window visible … ms` under `com.meetily.ai:launch`). First launch after re-signing: 1.16 s. |
+| ~0% CPU idle | 0.0% over 30 s, 33 MB footprint (Release); 0.0% after 46 min idle (Debug). |
+| Recording CPU and memory | Live session with Silero + Parakeet Ultra on 64 s of speech at real time: 2.7% of one core, 42 MB footprint (`MEETY_PERF=1 swift test -c release --filter SessionPerformance`). |
+
+Not done: the one-hour side-by-side recording against the Tauri app, and Instruments Energy (both need a person at the Mac).
+
+Fixed: quitting while a sheet was attached did nothing, and quitting while recording dropped the meeting row. Quit now ends sheets and saves the recording first.
+
+Parity checklist: every item has a Swift implementation. Covered by tests or unattended runs: recording, pause, stop and save (file-backed and demo sessions), live transcript, Parakeet and Whisper catalog/download/prepare, language routing, meetings list/search/rename/delete, summaries (stubbed providers), built-in llama generation, notes, import and retranscribe, onboarding screens, reading the real database. Never exercised (TCC or GUI needed): real microphone and system capture, device switching and mic loss mid-recording, audio playback output, real provider calls, notification delivery, the menu bar item, drag-and-drop.

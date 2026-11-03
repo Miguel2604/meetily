@@ -1,5 +1,6 @@
 import AppKit
 import Core
+import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
@@ -7,9 +8,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController?
     private var onboarding: OnboardingWindowController?
     private var statusItem: StatusItem?
+    private var quitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make()
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleQuitEvent(_:reply:)),
+                                                     forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEQuitApplication))
         let store: Store
         do {
             try FileManager.default.createDirectory(at: Paths.appSupport, withIntermediateDirectories: true)
@@ -48,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task { _ = try? await Keychain().importKeys(from: store) } // D10: plaintext columns stay until cutover
         NSApp.activate()
+        DispatchQueue.main.async { Self.logLaunchTime() }
         #if DEBUG
         DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window?.attachedSheet ?? main.window }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
@@ -57,6 +62,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showSettings(tab: tab)
         }
         #endif
+    }
+
+    /// Runs on the first run-loop turn after the window is ordered front (S22 target: < 300 ms warm).
+    private static func logLaunchTime() {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.size
+        var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return }
+        let start = info.kp_proc.p_starttime
+        let ms = (Date().timeIntervalSince1970 - (Double(start.tv_sec) + Double(start.tv_usec) / 1e6)) * 1000
+        Logger(subsystem: "com.meetily.ai", category: "launch").notice("window visible \(Int(ms), privacy: .public) ms after process start")
     }
 
     @objc func showSettings(_ sender: Any?) { showSettings(tab: nil) }
@@ -72,6 +88,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil { settingsWindow = SettingsWindowController(model: model) }
         settingsWindow?.show(tab)
     }
+
+    /// Quit Meety (menu, status item, Dock, logout). AppKit refuses `terminate:` while a sheet is attached, so sheets
+    /// end first; a recording in progress is saved first (in `terminateLater` the main actor never ran the save).
+    @objc func quit(_ sender: Any?) {
+        guard !quitting else { return }
+        quitting = true
+        for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
+        Task {
+            if let recorder = model?.recorder {
+                _ = await recorder.stop()
+                while recorder.phase == .stopping { try? await Task.sleep(for: .milliseconds(100)) } // a stop already running
+            }
+            NSApp.terminate(sender)
+        }
+    }
+
+    @objc private func handleQuitEvent(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) { quit(nil) }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { showMainWindow(nil) }

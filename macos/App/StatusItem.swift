@@ -23,7 +23,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         open.target = self
         menu.items = [state, .separator(), record, pause, .separator(), open,
                       NSMenuItem(title: "Settings…", action: #selector(AppDelegate.showSettings(_:)), keyEquivalent: ""),
-                      .separator(), NSMenuItem(title: "Quit Meety", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")]
+                      .separator(), NSMenuItem(title: "Quit Meety", action: #selector(AppDelegate.quit(_:)), keyEquivalent: "")]
         item.menu = menu
         track { [weak self] in self?.render() }
     }

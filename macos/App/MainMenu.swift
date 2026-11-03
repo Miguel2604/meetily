@@ -14,7 +14,7 @@ enum MainMenu {
         others.keyEquivalentModifierMask = [.command, .option]
         app.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Quit Meety", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "Quit Meety", action: #selector(AppDelegate.quit(_:)), keyEquivalent: "q")
 
         let file = submenu(main, "File")
         file.addItem(withTitle: "New Recording", action: Selector(("newRecording:")), keyEquivalent: "n")
