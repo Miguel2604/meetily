@@ -1,0 +1,6 @@
+build/
+Meety.xcodeproj/
+MeetyKit/.build/
+MeetyKit/.swiftpm/
+App/Info.plist
+App/Meety.entitlements
