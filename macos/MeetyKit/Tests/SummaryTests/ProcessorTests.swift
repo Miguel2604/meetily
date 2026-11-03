@@ -55,8 +55,9 @@ import Testing
         #expect(languageName(code: "pt-BR") == "Portuguese")
         #expect(languageName(code: "en_GB") == "English")
         #expect(languageName(code: "zh-TW") == "Traditional Chinese")
+        #expect(languageName(code: "tl") == "Tagalog") // offered by the summary language pickers
         #expect(languageName(code: "zh-CN") == "Chinese")
-        #expect(languageName(code: "tl") == nil)
+        #expect(languageName(code: "xx") == nil)
     }
 
     @Test func `normalization falls back to the pass-1 markdown unless cancelled`() throws {

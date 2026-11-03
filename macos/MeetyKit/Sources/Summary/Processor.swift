@@ -45,7 +45,7 @@ func languageName(code: String) -> String? {
         "ja": "Japanese", "pt": "Portuguese", "it": "Italian", "nl": "Dutch", "pl": "Polish", "ar": "Arabic", "hi": "Hindi",
         "ta": "Tamil", "tr": "Turkish", "vi": "Vietnamese", "th": "Thai", "id": "Indonesian", "sv": "Swedish", "cs": "Czech",
         "da": "Danish", "fi": "Finnish", "el": "Greek", "he": "Hebrew", "hu": "Hungarian", "no": "Norwegian", "ro": "Romanian",
-        "uk": "Ukrainian",
+        "uk": "Ukrainian", "tl": "Tagalog",
     ]
     return names[base]
 }
