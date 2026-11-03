@@ -47,6 +47,15 @@ if (platform === 'linux' && feature === 'cuda') {
   env.CMAKE_POSITION_INDEPENDENT_CODE = 'ON';
 }
 
+// The English transcription models run in the asr-helper Swift sidecar, which Tauri bundles.
+if (platform === 'darwin') {
+  const helper = path.join(__dirname, '..', 'src-tauri', 'binaries', 'asr-helper-aarch64-apple-darwin');
+  if (!fs.existsSync(helper)) {
+    console.log('🧩 Building asr-helper sidecar (first run only)...');
+    execSync(path.join(__dirname, '..', '..', 'asr-helper', 'build.sh'), { stdio: 'inherit' });
+  }
+}
+
 // Build the tauri command
 let tauriCmd = `tauri ${command}`;
 if (feature && feature !== 'none') {

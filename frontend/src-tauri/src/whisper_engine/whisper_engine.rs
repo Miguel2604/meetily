@@ -1,6 +1,6 @@
 // Commit name to recover the serial whisper engine processing for smaller meetings [Slower processing but dooes not fail] - "before parallel processing implementation"
 
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -905,6 +905,13 @@ impl WhisperEngine {
                 // Allow deletion of available models for testing/cleanup
                 log::info!("Deleting available model '{}' (for cleanup)", model_name);
 
+                if let Some(filename) = model_info.path.file_name().and_then(|n| n.to_str()) {
+                    let encoder_dir = self.models_dir.join(coreml_encoder_dir(filename));
+                    if encoder_dir.exists() {
+                        fs::remove_dir_all(&encoder_dir).await
+                            .map_err(|e| anyhow!("Failed to delete '{}': {}", encoder_dir.display(), e))?;
+                    }
+                }
                 if model_info.path.exists() {
                     fs::remove_file(&model_info.path).await
                         .map_err(|e| anyhow!("Failed to delete file '{}': {}", model_info.path.display(), e))?;
@@ -1078,28 +1085,60 @@ impl WhisperEngine {
             .find(|entry| entry.0 == model_name)
             .ok_or_else(|| anyhow!("Unsupported model: {}", model_name))?;
         let model_url = format!("{}/{}", WHISPER_MODEL_BASE_URL, filename);
+        let encoder_url = format!("{}/{}.zip", WHISPER_MODEL_BASE_URL, coreml_encoder_dir(filename));
 
-        self.download_model_from_url(model_name, &model_url, progress_callback).await
+        self.download_model_from_url(model_name, &model_url, Some(&encoder_url), progress_callback)
+            .await
     }
 
+    /// Downloads the model and, when `encoder_url` is given, its Core ML encoder (a zipped
+    /// `.mlmodelc` that whisper.cpp runs on the Neural Engine), as one job with one progress bar.
     async fn download_model_from_url(
         &self,
         model_name: &str,
         model_url: &str,
+        encoder_url: Option<&str>,
         progress_callback: Option<Box<dyn Fn(u8) + Send>>,
     ) -> Result<()> {
         let active_download = self.reserve_active_download(model_name).await?;
-        let file_path = self.models_dir.join(format!("ggml-{}.bin", model_name));
+        let filename = format!("ggml-{}.bin", model_name);
+        let file_path = self.models_dir.join(&filename);
+        // The model is ~43% of the bytes when an encoder follows (834 MB of 1,953 MB).
+        let model_share = if encoder_url.is_some() { (0, 43) } else { (0, 100) };
 
-        let result = self
+        let (mut result, progress_callback) = self
             .download_model_with_owner(
                 model_name,
                 model_url,
                 &file_path,
                 &active_download,
                 progress_callback,
+                model_share,
             )
             .await;
+
+        if let (Ok(()), Some(encoder_url)) = (&result, encoder_url) {
+            let encoder_dir = self.models_dir.join(coreml_encoder_dir(&filename));
+            let zip_path = encoder_dir.with_extension("mlmodelc.zip");
+            let (encoder_result, _) = self
+                .download_model_with_owner(
+                    model_name,
+                    encoder_url,
+                    &zip_path,
+                    &active_download,
+                    progress_callback,
+                    (43, 100),
+                )
+                .await;
+            result = match encoder_result {
+                Ok(()) => unzip(&zip_path, &self.models_dir).await,
+                Err(error) => Err(error),
+            };
+            let _ = fs::remove_file(&zip_path).await;
+            if result.is_err() {
+                let _ = fs::remove_dir_all(&encoder_dir).await;
+            }
+        }
 
         self.finish_download(model_name, &active_download, &file_path, result)
             .await
@@ -1112,7 +1151,31 @@ impl WhisperEngine {
         file_path: &PathBuf,
         active_download: &ActiveDownload,
         progress_callback: Option<Box<dyn Fn(u8) + Send>>,
+        progress_range: (u8, u8),
+    ) -> (Result<()>, Option<Box<dyn Fn(u8) + Send>>) {
+        // A Mutex makes the Send-only callback shareable across awaits; it is handed back for the next file.
+        let progress_callback = std::sync::Mutex::new(progress_callback);
+        let result = self
+            .download_file(model_name, model_url, file_path, active_download, &progress_callback, progress_range)
+            .await;
+        (result, progress_callback.into_inner().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    async fn download_file(
+        &self,
+        model_name: &str,
+        model_url: &str,
+        file_path: &PathBuf,
+        active_download: &ActiveDownload,
+        progress_callback: &std::sync::Mutex<Option<Box<dyn Fn(u8) + Send>>>,
+        (range_start, range_end): (u8, u8),
     ) -> Result<()> {
+        let scale = |raw: u8| range_start + ((raw.min(100) as u16 * (range_end - range_start) as u16) / 100) as u8;
+        let report = |raw: u8| {
+            if let Some(callback) = &*progress_callback.lock().unwrap_or_else(|e| e.into_inner()) {
+                callback(scale(raw));
+            }
+        };
         if active_download.cancellation.is_cancelled() {
             return Err(DownloadCancelled.into());
         }
@@ -1126,7 +1189,7 @@ impl WhisperEngine {
         {
             let mut models = self.available_models.write().await;
             if let Some(model_info) = models.get_mut(model_name) {
-                model_info.status = ModelStatus::Downloading { progress: 0 };
+                model_info.status = ModelStatus::Downloading { progress: scale(0) };
             }
         }
 
@@ -1156,9 +1219,7 @@ impl WhisperEngine {
         let mut last_progress_report = 0u8;
         let mut last_report_time = std::time::Instant::now();
 
-        if let Some(ref callback) = progress_callback {
-            callback(0);
-        }
+        report(0);
 
         loop {
             let chunk_result = tokio::select! {
@@ -1191,12 +1252,10 @@ impl WhisperEngine {
             if progress >= last_progress_report + 1 || progress == 100 || time_since_last_report >= 2 {
                 let mut models = self.available_models.write().await;
                 if let Some(model_info) = models.get_mut(model_name) {
-                    model_info.status = ModelStatus::Downloading { progress };
+                    model_info.status = ModelStatus::Downloading { progress: scale(progress) };
                 }
 
-                if let Some(ref callback) = progress_callback {
-                    callback(progress);
-                }
+                report(progress);
 
                 last_progress_report = progress;
                 last_report_time = std::time::Instant::now();
@@ -1206,13 +1265,11 @@ impl WhisperEngine {
         {
             let mut models = self.available_models.write().await;
             if let Some(model_info) = models.get_mut(model_name) {
-                model_info.status = ModelStatus::Downloading { progress: 100 };
+                model_info.status = ModelStatus::Downloading { progress: scale(100) };
             }
         }
 
-        if let Some(ref callback) = progress_callback {
-            callback(100);
-        }
+        report(100);
 
         file.flush()
             .await
@@ -1261,6 +1318,31 @@ impl WhisperEngine {
     }
 }
 
+/// whisper.cpp looks for `<model minus .bin and any -qX_Y suffix>-encoder.mlmodelc` next to the model.
+fn coreml_encoder_dir(model_filename: &str) -> String {
+    let stem = model_filename.strip_suffix(".bin").unwrap_or(model_filename);
+    let stem = match stem.rsplit_once('-') {
+        Some((base, quant)) if quant.len() == 4 && quant.starts_with('q') && quant.as_bytes()[2] == b'_' => base,
+        _ => stem,
+    };
+    format!("{}-encoder.mlmodelc", stem)
+}
+
+/// Unpack a zip into `dest` with macOS's bundled `ditto`.
+async fn unzip(zip_path: &Path, dest: &Path) -> Result<()> {
+    let output = tokio::process::Command::new("/usr/bin/ditto")
+        .args(["-x", "-k"])
+        .arg(zip_path)
+        .arg(dest)
+        .output()
+        .await
+        .map_err(|e| anyhow!("Failed to run ditto: {}", e))?;
+    if !output.status.success() {
+        return Err(anyhow!("Failed to unpack {}: {}", zip_path.display(), String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1269,11 +1351,49 @@ mod tests {
     use tokio::sync::oneshot;
     use tokio::time::{timeout, Duration};
 
-    fn tiny_model(models: &[ModelInfo]) -> &ModelInfo {
+    const TEST_MODEL: &str = crate::config::DEFAULT_WHISPER_MODEL;
+
+    /// Real download (~2 GB) and Neural Engine run. WHISPER_SMOKE_F32 is a 16 kHz mono f32le file:
+    /// WHISPER_SMOKE_F32=clip.f32 cargo test --lib real_whisper_smoke -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn real_whisper_smoke() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
+        engine.discover_models().await.unwrap();
+        engine.download_model(TEST_MODEL, None).await.unwrap();
+        let models_dir = engine.get_models_directory().await;
+        assert!(models_dir.join("ggml-large-v3-turbo-encoder.mlmodelc").is_dir());
+        assert!(!models_dir.join("ggml-large-v3-turbo-encoder.mlmodelc.zip").exists());
+        engine.discover_models().await.unwrap();
+        let started = std::time::Instant::now();
+        engine.load_model(TEST_MODEL).await.unwrap();
+        println!("load: {:?}", started.elapsed());
+        let audio: Vec<f32> = std::fs::read(std::env::var("WHISPER_SMOKE_F32").unwrap())
+            .unwrap()
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
+        for _ in 0..2 {
+            let started = std::time::Instant::now();
+            let text = engine.transcribe_audio(audio.clone(), Some("en".to_string())).await.unwrap();
+            println!("{:.1}s audio in {:?}: {}", audio.len() as f32 / 16_000.0, started.elapsed(), text);
+        }
+    }
+
+    #[test]
+    fn coreml_encoder_name_follows_whisper_cpp() {
+        assert_eq!(coreml_encoder_dir("ggml-large-v3-turbo-q8_0.bin"), "ggml-large-v3-turbo-encoder.mlmodelc");
+        assert_eq!(coreml_encoder_dir("ggml-large-v3-turbo.bin"), "ggml-large-v3-turbo-encoder.mlmodelc");
+        assert_eq!(coreml_encoder_dir("ggml-small.en-q5_1.bin"), "ggml-small.en-encoder.mlmodelc");
+        assert_eq!(coreml_encoder_dir("ggml-large-v3-q5_0.bin"), "ggml-large-v3-encoder.mlmodelc");
+    }
+
+    fn test_model(models: &[ModelInfo]) -> &ModelInfo {
         models
             .iter()
-            .find(|model| model.name == "tiny")
-            .expect("tiny should be present in the Whisper model catalog")
+            .find(|model| model.name == TEST_MODEL)
+            .expect("the default model should be present in the Whisper model catalog")
     }
 
     #[tokio::test]
@@ -1281,12 +1401,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
 
-        let _active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let _active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
         engine.available_models.write().await.insert(
-            "tiny".to_string(),
+            TEST_MODEL.to_string(),
             ModelInfo {
-                name: "tiny".to_string(),
-                path: dir.path().join("ggml-tiny.bin"),
+                name: TEST_MODEL.to_string(),
+                path: dir.path().join("ggml-large-v3-turbo-q8_0.bin"),
                 size_mb: 75,
                 accuracy: "Basic".to_string(),
                 speed: "Fast".to_string(),
@@ -1297,21 +1417,21 @@ mod tests {
 
         let absent = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&absent).status,
+            test_model(&absent).status,
             ModelStatus::Downloading { progress: 42 }
         ));
 
-        std::fs::write(dir.path().join("ggml-tiny.bin"), b"").unwrap();
+        std::fs::write(dir.path().join("ggml-large-v3-turbo-q8_0.bin"), b"").unwrap();
         let zero_byte = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&zero_byte).status,
+            test_model(&zero_byte).status,
             ModelStatus::Downloading { progress: 42 }
         ));
 
-        std::fs::write(dir.path().join("ggml-tiny.bin"), [0_u8; 32]).unwrap();
+        std::fs::write(dir.path().join("ggml-large-v3-turbo-q8_0.bin"), [0_u8; 32]).unwrap();
         let partial = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&partial).status,
+            test_model(&partial).status,
             ModelStatus::Downloading { progress: 42 }
         ));
     }
@@ -1321,16 +1441,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
 
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
         std::fs::write(&model_path, b"").unwrap();
         let missing_models = engine.discover_models().await.unwrap();
-        assert!(matches!(tiny_model(&missing_models).status, ModelStatus::Missing));
+        assert!(matches!(test_model(&missing_models).status, ModelStatus::Missing));
 
         std::fs::write(&model_path, vec![0_u8; 2 * 1024 * 1024]).unwrap();
         let corrupted_models = engine.discover_models().await.unwrap();
 
         assert!(matches!(
-            tiny_model(&corrupted_models).status,
+            test_model(&corrupted_models).status,
             ModelStatus::Corrupted { .. }
         ));
     }
@@ -1339,36 +1459,36 @@ mod tests {
     async fn finish_download_publishes_available_after_releasing_active_owner() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
 
         std::fs::write(&model_path, b"ggml\0\0\0\0").unwrap();
         std::fs::OpenOptions::new()
             .write(true)
             .open(&model_path)
             .unwrap()
-            .set_len(68 * 1024 * 1024)
+            .set_len(800 * 1024 * 1024)
             .unwrap();
 
         engine.discover_models().await.unwrap();
-        let active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
         let active_models = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&active_models).status,
+            test_model(&active_models).status,
             ModelStatus::Downloading { progress: 0 }
         ));
 
         engine
-            .finish_download("tiny", &active_download, &model_path, Ok(()))
+            .finish_download(TEST_MODEL, &active_download, &model_path, Ok(()))
             .await
             .unwrap();
 
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
         assert!(matches!(
             engine
                 .available_models
                 .read()
                 .await
-                .get("tiny")
+                .get(TEST_MODEL)
                 .expect("tiny should remain cached")
                 .status,
             ModelStatus::Available
@@ -1376,7 +1496,7 @@ mod tests {
 
         let rediscovered_models = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&rediscovered_models).status,
+            test_model(&rediscovered_models).status,
             ModelStatus::Available
         ));
     }
@@ -1385,27 +1505,27 @@ mod tests {
     async fn finish_download_rejects_invalid_header_and_cleans_file() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
         std::fs::write(&model_path, b"not-a-model").unwrap();
 
         engine.discover_models().await.unwrap();
-        let active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
         let error = engine
-            .finish_download("tiny", &active_download, &model_path, Ok(()))
+            .finish_download(TEST_MODEL, &active_download, &model_path, Ok(()))
             .await
             .unwrap_err();
 
         assert!(error
             .to_string()
             .contains("Invalid model file: missing GGML/GGUF magic number"));
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
         assert!(!model_path.exists());
         assert!(matches!(
             engine
                 .available_models
                 .read()
                 .await
-                .get("tiny")
+                .get(TEST_MODEL)
                 .expect("tiny should remain cached")
                 .status,
             ModelStatus::Missing
@@ -1426,8 +1546,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
 
-        let _first_owner = engine.reserve_active_download("tiny").await.unwrap();
-        assert!(engine.reserve_active_download("tiny").await.is_err());
+        let _first_owner = engine.reserve_active_download(TEST_MODEL).await.unwrap();
+        assert!(engine.reserve_active_download(TEST_MODEL).await.is_err());
     }
 
     #[tokio::test]
@@ -1436,7 +1556,7 @@ mod tests {
         let engine = Arc::new(WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap());
         engine.discover_models().await.unwrap();
 
-        let active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
         active_download.cancellation.cancel();
 
         let hook = Arc::new(DownloadStateTestHook {
@@ -1449,11 +1569,11 @@ mod tests {
 
         let finalization_engine = Arc::clone(&engine);
         let finalization_owner = Arc::clone(&active_download);
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
         let finalization = tokio::spawn(async move {
             finalization_engine
                 .finish_download(
-                    "tiny",
+                    TEST_MODEL,
                     &finalization_owner,
                     &model_path,
                     Err(DownloadCancelled.into()),
@@ -1502,60 +1622,60 @@ mod tests {
             .expect("discovery should complete")
             .unwrap()
             .unwrap();
-        assert!(matches!(tiny_model(&models).status, ModelStatus::Missing));
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(matches!(test_model(&models).status, ModelStatus::Missing));
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
     }
 
     #[tokio::test]
     async fn cancelling_an_unresponsive_download_keeps_ownership_reserved() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
 
         let outcome = engine
-            .cancel_download_with_timeout("tiny", Duration::from_millis(1))
+            .cancel_download_with_timeout(TEST_MODEL, Duration::from_millis(1))
             .await
             .expect("an unresponsive download should report cancellation pending");
 
         assert_eq!(outcome, CancelDownloadOutcome::Pending);
         assert!(active_download.cancellation.is_cancelled());
         assert!(matches!(
-            engine.active_downloads.lock().await.get("tiny"),
+            engine.active_downloads.lock().await.get(TEST_MODEL),
             Some(current) if Arc::ptr_eq(current, &active_download)
         ));
-        assert!(engine.reserve_active_download("tiny").await.is_err());
+        assert!(engine.reserve_active_download(TEST_MODEL).await.is_err());
     }
 
     #[tokio::test]
     async fn late_cancellation_preserves_a_completed_model_state() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
 
         std::fs::write(&model_path, b"ggml\0\0\0\0").unwrap();
         std::fs::OpenOptions::new()
             .write(true)
             .open(&model_path)
             .unwrap()
-            .set_len(68 * 1024 * 1024)
+            .set_len(800 * 1024 * 1024)
             .unwrap();
 
         engine.discover_models().await.unwrap();
-        let active_download = engine.reserve_active_download("tiny").await.unwrap();
+        let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
         engine
-            .finish_download("tiny", &active_download, &model_path, Ok(()))
+            .finish_download(TEST_MODEL, &active_download, &model_path, Ok(()))
             .await
             .unwrap();
 
         assert_eq!(
             engine
-                .cancel_download_with_timeout("tiny", Duration::from_millis(1))
+                .cancel_download_with_timeout(TEST_MODEL, Duration::from_millis(1))
                 .await
                 .unwrap(),
             CancelDownloadOutcome::Cancelled
         );
         assert!(matches!(
-            tiny_model(&engine.discover_models().await.unwrap()).status,
+            test_model(&engine.discover_models().await.unwrap()).status,
             ModelStatus::Available
         ));
     }
@@ -1638,7 +1758,7 @@ mod tests {
         engine.discover_models().await.unwrap();
         let (url, request, server) = response_http_server(8, b"ggml\0\0\0\0").await;
 
-        let error = engine.download_model_from_url("tiny", &url, None).await.unwrap_err();
+        let error = engine.download_model_from_url(TEST_MODEL, &url, None, None).await.unwrap_err();
         let request = String::from_utf8(request.await.unwrap()).unwrap();
         server.await.unwrap();
 
@@ -1647,14 +1767,14 @@ mod tests {
             "user-agent: meetily/{}",
             env!("CARGO_PKG_VERSION")
         )));
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
-        assert!(!dir.path().join("ggml-tiny.bin").exists());
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
+        assert!(!dir.path().join("ggml-large-v3-turbo-q8_0.bin").exists());
         assert!(matches!(
             engine
                 .available_models
                 .read()
                 .await
-                .get("tiny")
+                .get(TEST_MODEL)
                 .expect("tiny should remain cached")
                 .status,
             ModelStatus::Missing
@@ -1671,7 +1791,7 @@ mod tests {
         let download_a_engine = Arc::clone(&engine);
         let download_a = tokio::spawn(async move {
             download_a_engine
-                .download_model_from_url("tiny", &url_a, None)
+                .download_model_from_url(TEST_MODEL, &url_a, None, None)
                 .await
         });
 
@@ -1680,14 +1800,14 @@ mod tests {
             .expect("first request should receive response headers")
             .unwrap();
 
-        assert!(engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(engine.active_downloads.lock().await.contains_key(TEST_MODEL));
         let status_while_active = engine.discover_models().await.unwrap();
         assert!(matches!(
-            tiny_model(&status_while_active).status,
+            test_model(&status_while_active).status,
             ModelStatus::Downloading { progress: 0 }
         ));
 
-        timeout(Duration::from_secs(1), engine.cancel_download("tiny"))
+        timeout(Duration::from_secs(1), engine.cancel_download(TEST_MODEL))
             .await
             .expect("cancellation should not wait for a stalled response body")
             .unwrap();
@@ -1697,23 +1817,23 @@ mod tests {
             .expect("cancelled worker should finish promptly")
             .unwrap();
         assert!(is_download_cancelled(&download_a_result.unwrap_err()));
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
-        assert!(!dir.path().join("ggml-tiny.bin").exists());
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
+        assert!(!dir.path().join("ggml-large-v3-turbo-q8_0.bin").exists());
 
         let (url_b, headers_b, release_b, server_b) = stalled_http_server().await;
         let download_b_engine = Arc::clone(&engine);
         let download_b = tokio::spawn(async move {
             download_b_engine
-                .download_model_from_url("tiny", &url_b, None)
+                .download_model_from_url(TEST_MODEL, &url_b, None, None)
                 .await
         });
         timeout(Duration::from_secs(1), headers_b)
             .await
             .expect("retry should reserve the released model slot")
             .unwrap();
-        assert!(engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(engine.active_downloads.lock().await.contains_key(TEST_MODEL));
 
-        timeout(Duration::from_secs(1), engine.cancel_download("tiny"))
+        timeout(Duration::from_secs(1), engine.cancel_download(TEST_MODEL))
             .await
             .expect("retry cancellation should also complete promptly")
             .unwrap();
@@ -1735,39 +1855,39 @@ mod tests {
     async fn incomplete_response_cleans_partial_file_and_cache() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
         engine.discover_models().await.unwrap();
         let (url, _request, server) = response_http_server(8, b"ggml").await;
 
         let error = engine
-            .download_model_from_url("tiny", &url, None)
+            .download_model_from_url(TEST_MODEL, &url, None, None)
             .await
             .unwrap_err();
         server.await.unwrap();
 
         assert!(error.to_string().contains("Failed to read chunk"));
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
         assert!(!model_path.exists());
         assert!(matches!(
             engine
                 .available_models
                 .read()
                 .await
-                .get("tiny")
+                .get(TEST_MODEL)
                 .expect("tiny should remain cached")
                 .status,
             ModelStatus::Missing
         ));
 
         let models = engine.discover_models().await.unwrap();
-        assert!(matches!(tiny_model(&models).status, ModelStatus::Missing));
+        assert!(matches!(test_model(&models).status, ModelStatus::Missing));
     }
 
     #[tokio::test]
     async fn terminal_download_error_releases_the_active_transfer() {
         let dir = tempfile::tempdir().unwrap();
         let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
-        let model_path = dir.path().join("ggml-tiny.bin");
+        let model_path = dir.path().join("ggml-large-v3-turbo-q8_0.bin");
         std::fs::write(&model_path, vec![0_u8; 2 * 1024 * 1024]).unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -1783,14 +1903,14 @@ mod tests {
         });
 
         assert!(engine
-            .download_model_from_url("tiny", &format!("http://{address}/model.bin"), None)
+            .download_model_from_url(TEST_MODEL, &format!("http://{address}/model.bin"), None, None)
             .await
             .is_err());
         server.await.unwrap();
 
-        assert!(!engine.active_downloads.lock().await.contains_key("tiny"));
+        assert!(!engine.active_downloads.lock().await.contains_key(TEST_MODEL));
         assert!(!model_path.exists());
         let models = engine.discover_models().await.unwrap();
-        assert!(matches!(tiny_model(&models).status, ModelStatus::Missing));
+        assert!(matches!(test_model(&models).status, ModelStatus::Missing));
     }
 }
