@@ -22,13 +22,6 @@ public protocol TranscriptionEngine: AnyObject, Sendable {
 
 public let transcriptionSampleRate = 16_000.0
 
-/// Catalog status of a downloadable model.
-public enum ModelStatus: Sendable, Hashable {
-    case missing
-    case downloading(Double)
-    case available
-}
-
 /// Which engine transcribes, from the language preference and the `transcript_settings` row.
 public enum EngineChoice: Sendable, Hashable {
     case parakeet(ParakeetModel)
