@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronRight, Settings, Home, Trash2, Pencil, NotebookPen, SearchIcon, X, Upload, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Settings, Home, Trash2, Pencil, NotebookPen, SearchIcon, X, Upload, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSidebar } from './SidebarProvider';
 import type { CurrentMeeting } from '@/components/Sidebar/SidebarProvider';
@@ -485,7 +485,7 @@ const Sidebar: React.FC = () => {
             <TooltipContent side="right"><p>{isRecording ? 'Recording in progress' : 'Start recording'}</p></TooltipContent>
           </Tooltip>
           {railItem('Home', isHomePage, () => router.push('/'), <Home className="w-4 h-4" strokeWidth={1.75} />)}
-          {railItem('Meetings', isMeetingPage, () => { toggleCollapse(); if (!expandedFolders.has('meetings')) toggleFolder('meetings'); }, <NotebookPen className="w-4 h-4" strokeWidth={1.75} />)}
+          {railItem('Meetings', isMeetingPage, toggleCollapse, <NotebookPen className="w-4 h-4" strokeWidth={1.75} />)}
           {betaFeatures.importAndRetranscribe && railItem('Import audio', false, () => openImportDialog(), <Upload className="w-4 h-4" strokeWidth={1.75} />)}
           <div className="flex-1" />
           {railItem('Settings', isSettingsPage, () => router.push('/settings'), <Settings className="w-4 h-4" strokeWidth={1.75} />)}
@@ -525,9 +525,9 @@ const Sidebar: React.FC = () => {
           }}
         >
           <div className="flex items-center w-full min-h-5 gap-1">
-            <span className="flex-1 truncate" title={item.title}>{item.title}</span>
+            <span className="flex-1 min-w-0 truncate" title={item.title}>{item.title}</span>
             {isMeetingItem && (
-              <div className="hidden group-hover:flex group-focus-within:flex items-center -my-1 -mr-1.5">
+              <div className="flex items-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity -my-1 -mr-1.5 has-[:focus-visible]:opacity-100">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -625,17 +625,12 @@ const Sidebar: React.FC = () => {
                 )}
               </nav>
 
-              <button
-                onClick={() => toggleFolder('meetings')}
-                className="w-full flex items-center gap-1 mt-6 mb-1 px-2.5 text-xs text-gray-600 hover:text-gray-950"
-                aria-expanded={expandedFolders.has('meetings')}
-              >
+              <h2 className="flex items-center mt-6 mb-1 px-2.5 text-xs font-normal text-gray-600">
                 <span>Meetings</span>
-                {expandedFolders.has('meetings') ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                 <span className="ml-auto tabular-nums">
                   {searchQuery && isSearching ? 'Searching…' : meetingCount}
                 </span>
-              </button>
+              </h2>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 px-3">
