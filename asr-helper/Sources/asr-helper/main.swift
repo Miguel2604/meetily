@@ -1,4 +1,4 @@
-// Meetily sidecar: English transcription on the Apple Neural Engine through FluidAudio
+// Meety sidecar: English transcription on the Apple Neural Engine through FluidAudio
 // (Parakeet Ultra or Phonon-2, both Parakeet TDT 0.6B v3 derivatives).
 //
 //   asr-helper status   --model <ultra|phonon2> --dir <model dir>  -> {"downloaded":bool}

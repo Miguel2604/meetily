@@ -24,7 +24,7 @@
     Get latest <a href="https://www.zackriya.com/meetily-subscribe/"><b>Product updates</b></a> <br><br>
     <a href="https://meetily.ai"><b>Website</b></a> •
     <a href="https://www.linkedin.com/company/106363062/"><b>LinkedIn</b></a> •
-    <a href="https://discord.gg/crRymMQBFH"><b>Meetily Discord</b></a> •
+    <a href="https://discord.gg/crRymMQBFH"><b>Meety Discord</b></a> •
     <a href="https://discord.com/invite/vCFJvN4BwJ"><b>Privacy-First AI</b></a> •
     <a href="https://www.reddit.com/r/meetily/"><b>Reddit</b></a>
 </p>
@@ -35,7 +35,7 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 </p>
 
 <p align="center">
-    <img src="docs/meetily_demo.gif" width="650" alt="Meetily Demo" />
+    <img src="docs/meetily_demo.gif" width="650" alt="Meety Demo" />
     <br>
     <a href="https://youtu.be/6FnhSC_eSz8">View full Demo Video</a>
 </p>
@@ -44,7 +44,7 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 
 ---
 
-> **Meetily PRO Upgrade Offer** - Meetily PRO is available for users who need speaker identification, API, MCP and other integrations, advanced exports, custom summary workflows, and team-ready features. Use coupon code **LAUNCH20** for **20% off** until the next Meetily Community Edition release. Pro adds speaker identification (who said what), custom summary templates, PDF/DOCX export, and MCP, CLI and webhook integrations. [Explore Meetily PRO →](https://meetily.ai/pro/)
+> **Meety PRO Upgrade Offer** - Meety PRO is available for users who need speaker identification, API, MCP and other integrations, advanced exports, custom summary workflows, and team-ready features. Use coupon code **LAUNCH20** for **20% off** until the next Meety Community Edition release. Pro adds speaker identification (who said what), custom summary templates, PDF/DOCX export, and MCP, CLI and webhook integrations. [Explore Meety PRO →](https://meetily.ai/pro/)
 
 ---
 
@@ -52,13 +52,13 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 <summary>Table of Contents</summary>
 
 - [Introduction](#introduction)
-- [Why Meetily?](#why-meetily)
+- [Why Meety?](#why-meety)
 - [Features](#features)
 - [Installation](#installation)
 - [Key Features in Action](#key-features-in-action)
 - [System Architecture](#system-architecture)
 - [For Developers](#for-developers)
-- [Meetily PRO](#meetily-pro)
+- [Meety PRO](#meety-pro)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -66,9 +66,9 @@ A privacy-first AI meeting assistant that captures, transcribes, and summarizes 
 
 ## Introduction
 
-Meetily is a privacy-first AI meeting assistant that runs entirely on your local machine. It captures your meetings, transcribes them in real-time, and generates summaries with a local model by default. Audio and transcription never leave your device. If you choose a cloud AI provider for summaries, only the transcript text is sent to it. This makes it the perfect solution for professionals and enterprises who need to maintain complete control over their sensitive information.
+Meety is a privacy-first AI meeting assistant that runs entirely on your local machine. It captures your meetings, transcribes them in real-time, and generates summaries with a local model by default. Audio and transcription never leave your device. If you choose a cloud AI provider for summaries, only the transcript text is sent to it. This makes it the perfect solution for professionals and enterprises who need to maintain complete control over their sensitive information.
 
-## Why Meetily?
+## Why Meety?
 
 While there are many meeting transcription tools available, this solution stands out by offering:
 
@@ -91,7 +91,7 @@ Meeting AI tools create significant privacy and compliance risks across all sect
 
 Whether you're a defense consultant, enterprise executive, legal professional, or healthcare provider, your sensitive discussions shouldn't live on servers you don't control. Cloud meeting tools promise convenience but deliver privacy nightmares with unclear data storage practices and potential unauthorized access.
 
-**Meetily solves this:** Complete data sovereignty on your infrastructure, zero vendor lock-in, and full control over your sensitive conversations.
+**Meety solves this:** Complete data sovereignty on your infrastructure, zero vendor lock-in, and full control over your sensitive conversations.
 
 </details>
 
@@ -101,7 +101,7 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 - **Real-time Transcription:** Get a live transcript of your meeting as it happens.
 - **AI-Powered Summaries:** Generate summaries of your meetings using powerful language models.
 - **Multi-Platform:** Native apps for Windows and macOS (Apple Silicon). On Linux, build from source.
-- **Open Source:** Meetily is open source and free to use.
+- **Open Source:** Meety is open source and free to use.
 - **Flexible AI Provider Support:** Choose from Ollama (local), Claude, Groq, OpenRouter, or use your own OpenAI-compatible endpoint.
 
 ## Installation
@@ -115,10 +115,10 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 
 ### 🍎 **macOS**
 
-1. Download `meetily_0.4.1_aarch64.dmg` from [Releases](https://github.com/Zackriya-Solutions/meetily/releases/latest)
+1. Download `meety_0.4.1_aarch64.dmg` from [Releases](https://github.com/Zackriya-Solutions/meetily/releases/latest)
 2. Open the downloaded `.dmg` file
-3. Drag **Meetily** to your Applications folder
-4. Open **Meetily** from Applications folder
+3. Drag **Meety** to your Applications folder
+4. Open **Meety** from Applications folder
 
 ### 🐧 **Linux**
 
@@ -131,7 +131,7 @@ Build from source following our detailed guides:
 
 ```bash
 git clone https://github.com/Zackriya-Solutions/meetily
-cd meetily/frontend
+cd meety/frontend
 pnpm install --frozen-lockfile
 ./build-gpu.sh
 ```
@@ -143,7 +143,7 @@ pnpm install --frozen-lockfile
 Transcribe meetings entirely on your device using **Whisper** or **Parakeet** models. No cloud required.
 
 <p align="center">
-    <img src="docs/home.png" width="650" style="border-radius: 10px;" alt="Meetily Demo" />
+    <img src="docs/home.png" width="650" style="border-radius: 10px;" alt="Meety Demo" />
 </p>
 
 ### 📥 Import & Enhance `Beta`
@@ -204,27 +204,27 @@ CUDA is available through an appropriately configured NVIDIA source build; the s
 
 ## System Architecture
 
-Meetily is a single, self-contained application built with [Tauri](https://tauri.app/). It uses a Rust-based backend to handle all the core logic, and a Next.js frontend for the user interface.
+Meety is a single, self-contained application built with [Tauri](https://tauri.app/). It uses a Rust-based backend to handle all the core logic, and a Next.js frontend for the user interface.
 
 For more details, see the [Architecture documentation](docs/architecture.md).
 
 ## For Developers
 
-If you want to contribute to Meetily or build it from source, you'll need to have Rust and Node.js installed. For detailed build instructions, please see the [Building from Source guide](docs/BUILDING.md).
+If you want to contribute to Meety or build it from source, you'll need to have Rust and Node.js installed. For detailed build instructions, please see the [Building from Source guide](docs/BUILDING.md).
 
-## Meetily Pro
+## Meety Pro
 
 <p align="center">
     <img src="docs/pv2.1.png" width="650" style="border-radius: 10px;" alt="Upcoming version" />
 </p>
 
-**Meetily PRO** is a professional solution with advanced features for serious users and teams. 
+**Meety PRO** is a professional solution with advanced features for serious users and teams. 
 
 ### Community Thank-You Offer
 
-Meetily Community Edition will remain **free and open source (MIT)**. PRO exists for users and teams who want a more advanced meeting workflow, including speaker identification, custom summary templates, advanced exports, auto-meeting detection, and AI assistant integrations (MCP, CLI, webhooks), and self-hosted deployment options for teams.
+Meety Community Edition will remain **free and open source (MIT)**. PRO exists for users and teams who want a more advanced meeting workflow, including speaker identification, custom summary templates, advanced exports, auto-meeting detection, and AI assistant integrations (MCP, CLI, webhooks), and self-hosted deployment options for teams.
 
-For the community that helped Meetily grow, we are making the upgrade easier: use coupon code **LAUNCH20** for **20% off Meetily PRO** until the next Meetily Community Edition release.
+For the community that helped Meety grow, we are making the upgrade easier: use coupon code **LAUNCH20** for **20% off Meety PRO** until the next Meety Community Edition release.
 
 ### Key Advantages Over Community Edition:
 
@@ -244,7 +244,7 @@ For the community that helped Meetily grow, we are making the upgrade easier: us
 - **Power users** who need advanced export formats and custom workflows
 - **Compliance-focused organizations** requiring GDPR readiness
 
-> **Note:** Meetily Community Edition remains **free & open source forever** (MIT) with local transcription, AI summaries, and core features. PRO is a separate professional solution for users who need enhanced accuracy and advanced capabilities.
+> **Note:** Meety Community Edition remains **free & open source forever** (MIT) with local transcription, AI summaries, and core features. PRO is a separate professional solution for users who need enhanced accuracy and advanced capabilities.
 
 Pro is $10/user/month, billed annually, with a 14-day free trial.
 

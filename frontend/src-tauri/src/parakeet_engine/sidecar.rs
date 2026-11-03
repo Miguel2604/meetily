@@ -15,7 +15,7 @@ const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The sidecar binary, or `None` when it isn't built.
 pub fn helper_path() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("MEETILY_ASR_HELPER") {
+    if let Ok(path) = std::env::var("MEETY_ASR_HELPER") {
         return Some(PathBuf::from(path)).filter(|p| p.is_file());
     }
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();

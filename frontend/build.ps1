@@ -1,10 +1,10 @@
-# Meetily Build Script with Code Signing
+# Meety Build Script with Code Signing
 # Loads signing credentials from .env file or environment variables
 # Then calls build-gpu.bat to execute the build
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "   Meetily GPU Build (Signed)"
+Write-Host "   Meety GPU Build (Signed)"
 Write-Host "========================================"
 Write-Host ""
 

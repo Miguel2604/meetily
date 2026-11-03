@@ -130,7 +130,7 @@ pub enum CancelDownloadOutcome {
 }
 
 const CANCEL_DOWNLOAD_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
-const HELPER_MISSING: &str = "asr-helper is not built. Run asr-helper/build.sh, then restart Meetily.";
+const HELPER_MISSING: &str = "asr-helper is not built. Run asr-helper/build.sh, then restart Meety.";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParakeetEngineError {

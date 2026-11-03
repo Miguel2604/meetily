@@ -2,7 +2,7 @@
 """
 Meeting Transcript Database Injector
 
-Injects CSV-based transcript data into the Meetily SQLite database,
+Injects CSV-based transcript data into the Meety SQLite database,
 creating meeting entries identical to those from normal recordings.
 
 Usage:
@@ -227,7 +227,7 @@ def verify_injection(db_path: str, meeting_id: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Inject CSV transcript data into Meetily database",
+        description="Inject CSV transcript data into Meety database",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 CSV Format (minimal - just 'text' column required):
@@ -281,7 +281,7 @@ Example usage:
 
     if not db_path.exists():
         print(f"Error: Database not found at {db_path}", file=sys.stderr)
-        print("Make sure Meetily has been run at least once to create the database.", file=sys.stderr)
+        print("Make sure Meety has been run at least once to create the database.", file=sys.stderr)
         sys.exit(1)
 
     # Resolve CSV path
@@ -344,7 +344,7 @@ Example usage:
     except Exception as e:
         print(f"Warning: Verification failed: {e}", file=sys.stderr)
 
-    print("\nThe meeting should now appear in the Meetily sidebar.")
+    print("\nThe meeting should now appear in the Meety sidebar.")
 
 
 if __name__ == "__main__":
