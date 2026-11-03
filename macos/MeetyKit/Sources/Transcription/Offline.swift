@@ -72,8 +72,9 @@ public enum OfflineTranscription {
     }
 
     /// Copies `source` into a new meeting folder, transcribes it and creates the meeting.
-    /// Cancelling (or failing) before the meeting is saved removes the folder.
-    public static func importAudio(
+    /// Cancelling (or failing) before the meeting is saved removes the folder. Off the caller's actor: copying
+    /// and decoding block.
+    @concurrent public static func importAudio(
         _ source: URL, title: String, recordingsFolder: URL, store: Store, engine: any TranscriptionEngine,
         detector: any VoiceDetector, progress: @escaping @Sendable (Progress) -> Void = { _ in }
     ) async throws -> ImportResult {
@@ -106,7 +107,7 @@ public enum OfflineTranscription {
 
     /// Transcribes a meeting's audio again (another model or language) and swaps its transcript in one
     /// transaction. Cancelling leaves the old transcript. Returns the new segment count.
-    public static func retranscribe(
+    @concurrent public static func retranscribe(
         meetingID: String, store: Store, engine: any TranscriptionEngine, detector: any VoiceDetector,
         progress: @escaping @Sendable (Progress) -> Void = { _ in }
     ) async throws -> Int {
