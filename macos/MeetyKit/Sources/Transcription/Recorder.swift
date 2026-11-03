@@ -111,17 +111,17 @@ public final class Recorder {
 
     public func pause() async {
         guard phase == .recording, let session else { return }
-        await session.pause()
+        phase = .paused // before suspending, so a Stop meanwhile isn't overwritten
         pausedAt = Date()
-        phase = .paused
+        await session.pause()
     }
 
     public func resume() async {
         guard phase == .paused, let session else { return }
-        await session.resume()
         if let pausedAt { pausedTotal += Date().timeIntervalSince(pausedAt) }
         pausedAt = nil
         phase = .recording
+        await session.resume()
     }
 
     /// Drains transcription, saves the meeting (renamed if the title was edited) and returns its id.
