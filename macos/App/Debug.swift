@@ -9,10 +9,10 @@ enum DebugSnapshot {
         guard let path = ProcessInfo.processInfo.environment["MEETY_SNAPSHOT"] else { return }
         let delay = Double(ProcessInfo.processInfo.environment["MEETY_SNAPSHOT_DELAY"] ?? "") ?? 1.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            defer { exit(0) } // terminate(_:) waits while a sheet is attached
             guard let view = window()?.contentView?.superview, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
-            NSApp.terminate(nil)
         }
     }
 }

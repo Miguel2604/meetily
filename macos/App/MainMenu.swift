@@ -18,6 +18,10 @@ enum MainMenu {
 
         let file = submenu(main, "File")
         file.addItem(withTitle: "New Recording", action: Selector(("newRecording:")), keyEquivalent: "n")
+        let pause = file.addItem(withTitle: "Pause Recording", action: Selector(("pauseRecording:")), keyEquivalent: "p")
+        pause.keyEquivalentModifierMask = [.command, .shift]
+        file.addItem(withTitle: "Stop Recording", action: Selector(("stopRecording:")), keyEquivalent: ".")
+        file.addItem(.separator())
         file.addItem(withTitle: "Import Audio…", action: Selector(("importAudio:")), keyEquivalent: "i")
         file.addItem(.separator())
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -45,6 +49,8 @@ enum MainMenu {
         let window = submenu(main, "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        window.addItem(.separator())
+        window.addItem(withTitle: "Meety", action: Selector(("showMainWindow:")), keyEquivalent: "0")
         window.addItem(.separator())
         window.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         NSApp.windowsMenu = window

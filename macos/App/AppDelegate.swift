@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: MainWindowController?
     private var settingsWindow: SettingsWindowController?
     private var onboarding: OnboardingWindowController?
+    private var statusItem: StatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make()
@@ -40,12 +41,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             main.showWindow(nil)
         }
         Task { await model.reloadMeetings() }
+        statusItem = StatusItem(model: model) { [weak self] in self?.showMainWindow(nil) }
+        model.notifier.openMeeting = { [weak self, weak model] id in
+            self?.showMainWindow(nil)
+            model?.route = .meeting(id)
+        }
         Task { _ = try? await Keychain().importKeys(from: store) } // D10: plaintext columns stay until cutover
         NSApp.activate()
         #if DEBUG
-        DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window }
+        DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window?.attachedSheet ?? main.window }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
         if let id = ProcessInfo.processInfo.environment["MEETY_OPEN_MEETING"] { model.route = .meeting(id) }
+        if let path = ProcessInfo.processInfo.environment["MEETY_IMPORT"] { main.importFile(URL(fileURLWithPath: path)) }
         if let tab = ProcessInfo.processInfo.environment["MEETY_SETTINGS_TAB"].flatMap(Int.init).flatMap(SettingsWindowController.Tab.init) {
             showSettings(tab: tab)
         }
@@ -54,6 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showSettings(_ sender: Any?) { showSettings(tab: nil) }
 
+    /// The main window, or onboarding while it is still open.
+    @objc func showMainWindow(_ sender: Any?) {
+        (onboarding ?? mainWindow)?.showWindow(nil)
+        NSApp.activate()
+    }
+
     func showSettings(tab: SettingsWindowController.Tab?) {
         guard let model else { return }
         if settingsWindow == nil { settingsWindow = SettingsWindowController(model: model) }
@@ -61,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { (onboarding ?? mainWindow)?.showWindow(nil) }
+        if !flag { showMainWindow(nil) }
         return true
     }
 }

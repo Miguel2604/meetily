@@ -18,6 +18,7 @@ final class AppModel {
     let builtIn = BuiltInModels(directory: Paths.summaryModels)
     @ObservationIgnored private(set) lazy var summaries = SummaryService(store: store, builtIn: builtIn)
     @ObservationIgnored private(set) lazy var library = ModelLibrary(app: self)
+    @ObservationIgnored let notifier = Notifier()
     /// The summary template picked last in this session.
     @ObservationIgnored var summaryTemplate = "standard_meeting"
     private(set) var meetings: [Meeting] = []
@@ -37,12 +38,37 @@ final class AppModel {
     func startRecording() async {
         route = .home
         await recorder.start { report in try await prepareRecording(report) }
+        if recorder.phase == .recording, settings.recordingNotifications {
+            notifier.post("Recording started", "Meety is recording “\(recorder.title)”.")
+        }
     }
 
     func stopRecording() async {
+        let title = recorder.title
         guard let id = await recorder.stop() else { return }
         await reloadMeetings()
+        if settings.recordingNotifications { notifier.post("Recording stopped", "“\(title)” was saved.", meetingID: id) }
+        // Mark the summary pending before the meeting opens, so its view picks the run up.
+        if settings.autoSummary {
+            do {
+                if let run = try await summaries.startWithSavedModel(meetingID: id, templateID: summaryTemplate, language: settings.summaryLanguage) {
+                    Task {
+                        await run.task.value
+                        await summaryFinished(meetingID: id)
+                    }
+                }
+            } catch {
+                present(error)
+            }
+        }
         route = .meeting(id)
+    }
+
+    /// Posts "summary ready" when the meeting's latest run completed and the setting is on.
+    func summaryFinished(meetingID: String) async {
+        guard settings.summaryNotifications, let state = try? await summaries.summary(meetingID: meetingID), state.status == "completed" else { return }
+        let title = meetings.first { $0.id == meetingID }?.title ?? state.meetingName ?? "Your meeting"
+        notifier.post("Summary ready", title, meetingID: meetingID)
     }
 
     /// Permission, the transcription engine, voice detection, then the captures (useRecordingStart.ts).

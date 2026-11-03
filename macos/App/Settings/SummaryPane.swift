@@ -79,12 +79,12 @@ final class SummaryPane: SettingsPane {
         section("Built-in models", rows, note: "Built-in models run on this Mac with llama.cpp. Pick one with Use, or choose it above.")
 
         language.addItem(withTitle: "Same as the transcript")
-        language.addItems(withTitles: RetranscribeSheet.languages.dropFirst().map(\.name))
+        language.addItems(withTitles: TranscribeSheet.languages.dropFirst().map(\.name))
         language.target = self
         language.action = #selector(languageChosen)
         let auto = Self.checkbox("Generate a summary when a recording stops", model.settings.autoSummary, target: self, action: #selector(autoChosen(_:)))
         section("Summaries", [form([("Automatic", auto), ("Language", language)])])
-        let languages = RetranscribeSheet.languages.dropFirst().map(\.code)
+        let languages = TranscribeSheet.languages.dropFirst().map(\.code)
         language.selectItem(at: model.settings.summaryLanguage.flatMap { languages.firstIndex(of: $0) }.map { $0 + 1 } ?? 0)
 
         // A saved change elsewhere (a built-in row's Use) resets the form to what is stored.
@@ -281,6 +281,6 @@ final class SummaryPane: SettingsPane {
 
     @objc private func languageChosen() {
         let index = language.indexOfSelectedItem
-        model.settings.summaryLanguage = index == 0 ? nil : RetranscribeSheet.languages[index].code
+        model.settings.summaryLanguage = index == 0 ? nil : TranscribeSheet.languages[index].code
     }
 }

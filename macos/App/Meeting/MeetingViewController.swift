@@ -213,7 +213,7 @@ final class MeetingViewController: NSSplitViewController {
         modelPopup.selectItem(at: 0)
 
         languagePopup.removeAllItems()
-        let languages = [("", "Auto (match transcript)")] + RetranscribeSheet.languages.dropFirst().map { ($0.code, $0.name) }
+        let languages = [("", "Auto (match transcript)")] + TranscribeSheet.languages.dropFirst().map { ($0.code, $0.name) }
         for (code, name) in languages {
             languagePopup.addItem(withTitle: name)
             languagePopup.lastItem?.representedObject = code
@@ -271,6 +271,7 @@ final class MeetingViewController: NSSplitViewController {
         Task {
             await summary.generate(provider: choice.provider, model: choice.model, templateID: template,
                                    customPrompt: customPrompt.stringValue, language: language)
+            if !NSApp.isActive { await model.summaryFinished(meetingID: meetingID) } // only when Meety is in the background
         }
     }
 
@@ -339,7 +340,7 @@ final class MeetingViewController: NSSplitViewController {
     }
 
     @objc private func retranscribe() {
-        presentAsSheet(RetranscribeSheet(model: model, meetingID: meetingID) { [weak self] in
+        presentAsSheet(TranscribeSheet(model: model, job: .retranscribe(meetingID: meetingID)) { [weak self] _ in
             Task { [weak self] in
                 guard let self else { return }
                 transcripts = (try? await model.store.transcripts(meetingID: meetingID)) ?? transcripts

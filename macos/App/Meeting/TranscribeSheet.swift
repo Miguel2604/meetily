@@ -2,8 +2,14 @@ import AppKit
 import Core
 import Transcription
 
-/// Transcribe a meeting's recording again with another model or language (RetranscribeDialog.tsx).
-final class RetranscribeSheet: NSViewController {
+/// Import an audio file as a new meeting (ImportAudioDialog.tsx), or transcribe a meeting's recording again
+/// with another model or language (RetranscribeDialog.tsx).
+final class TranscribeSheet: NSViewController {
+    enum Job {
+        case importFile(URL)
+        case retranscribe(meetingID: String)
+    }
+
     static let languages: [(code: String, name: String)] = [
         ("auto", "Auto-detect"), ("en", "English"), ("tl", "Tagalog"), ("es", "Spanish"), ("fr", "French"), ("de", "German"),
         ("pt", "Portuguese"), ("it", "Italian"), ("ja", "Japanese"), ("ko", "Korean"), ("zh", "Chinese"), ("hi", "Hindi"),
@@ -22,19 +28,21 @@ final class RetranscribeSheet: NSViewController {
     }
 
     private let model: AppModel
-    private let meetingID: String
-    private let onDone: () -> Void
+    private let job: Job
+    /// The meeting that was created or retranscribed; nil when cancelled.
+    private let onDone: (String?) -> Void
+    private let titleField = NSTextField()
     private let language = NSPopUpButton()
     private let engine = NSPopUpButton()
     private let progress = NSProgressIndicator()
-    private let status = NSTextField.meety("Re-process the audio with different language settings", font: Typography.callout, color: .meetyMutedForeground)
-    private lazy var run = NSButton.meety("Retranscribe", role: .primary, target: self, action: #selector(start))
+    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private lazy var run = NSButton.meety("", role: .primary, target: self, action: #selector(start))
     private lazy var cancel = NSButton.meety("Cancel", target: self, action: #selector(cancelOrClose))
     private var task: Task<Void, Never>?
 
-    init(model: AppModel, meetingID: String, onDone: @escaping () -> Void) {
+    init(model: AppModel, job: Job, onDone: @escaping (String?) -> Void) {
         self.model = model
-        self.meetingID = meetingID
+        self.job = job
         self.onDone = onDone
         super.init(nibName: nil, bundle: nil)
     }
@@ -52,14 +60,28 @@ final class RetranscribeSheet: NSViewController {
         progress.isHidden = true
         run.keyEquivalent = "\r"
         cancel.keyEquivalent = "\u{1b}"
-        let grid = NSGridView(views: [
-            [NSTextField(labelWithString: "Language"), language],
-            [NSTextField(labelWithString: "Model"), engine],
-        ])
+        var rows: [[NSView]] = [[NSTextField(labelWithString: "Language"), language], [NSTextField(labelWithString: "Model"), engine]]
+        let heading: String
+        switch job {
+        case .importFile(let url):
+            heading = "Import audio"
+            status.stringValue = "\(url.lastPathComponent) becomes a new meeting with a transcript."
+            titleField.stringValue = url.deletingPathExtension().lastPathComponent
+            titleField.placeholderString = "Enter meeting title"
+            titleField.widthAnchor.constraint(equalToConstant: 280).isActive = true
+            rows.insert([NSTextField(labelWithString: "Meeting title"), titleField], at: 0)
+            run.title = "Import"
+        case .retranscribe:
+            heading = "Retranscribe meeting"
+            status.stringValue = "Re-process the audio with different language settings"
+            run.title = "Retranscribe"
+        }
+        let grid = NSGridView(views: rows)
+        grid.rowAlignment = .firstBaseline
         grid.column(at: 0).xPlacement = .trailing
         grid.rowSpacing = 10
         let buttons = NSStackView(views: [NSView(), cancel, run])
-        let stack = NSStackView(views: [NSTextField.meety("Retranscribe meeting", font: Typography.headline), status, grid, progress, buttons])
+        let stack = NSStackView(views: [NSTextField.meety(heading, font: Typography.headline), status, grid, progress, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -72,12 +94,18 @@ final class RetranscribeSheet: NSViewController {
     @objc private func start() {
         let code = Self.languages[language.indexOfSelectedItem].code
         let choice = Model.allCases[engine.indexOfSelectedItem]
+        let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case .importFile = job, title.isEmpty {
+            status.stringValue = "Enter a meeting title."
+            return
+        }
         run.isEnabled = false
         language.isEnabled = false
         engine.isEnabled = false
         progress.isHidden = false
         status.stringValue = "Loading model…"
-        let model = self.model, meetingID = self.meetingID
+        titleField.isEnabled = false
+        let model = self.model, job = self.job
         task = Task { [weak self] in
             do {
                 let transcriber: any TranscriptionEngine = switch choice {
@@ -86,31 +114,41 @@ final class RetranscribeSheet: NSViewController {
                 case .whisperTurbo: try await model.whisper.engine(.turbo, language: code == "auto" ? nil : code)
                 }
                 let detector = try await model.voiceDetector()
-                let count = try await OfflineTranscription.retranscribe(
-                    meetingID: meetingID, store: model.store, engine: transcriber, detector: detector) { update in
+                let report: @Sendable (OfflineTranscription.Progress) -> Void = { update in
                     Task { @MainActor in
                         self?.progress.doubleValue = update.fraction
                         self?.status.stringValue = "Processing audio... (\(update.stage.rawValue))"
                     }
                 }
-                self?.finish("Done: \(count) segments.")
+                switch job {
+                case .importFile(let url):
+                    let result = try await OfflineTranscription.importAudio(
+                        url, title: title, recordingsFolder: model.settings.saveFolder, store: model.store, engine: transcriber,
+                        detector: detector, progress: report)
+                    self?.finish(result.meetingID)
+                case .retranscribe(let meetingID):
+                    _ = try await OfflineTranscription.retranscribe(meetingID: meetingID, store: model.store, engine: transcriber,
+                                                                    detector: detector, progress: report)
+                    self?.finish(meetingID)
+                }
             } catch is CancellationError {
                 self?.finish(nil)
             } catch {
-                self?.status.stringValue = "An error occurred during retranscription: \(error)"
+                self?.status.stringValue = "An error occurred: \(error)"
                 self?.run.isEnabled = true
+                self?.titleField.isEnabled = true
                 self?.progress.isHidden = true
             }
         }
     }
 
-    private func finish(_ message: String?) {
+    private func finish(_ meetingID: String?) {
         task = nil
-        onDone()
+        onDone(meetingID)
         dismiss(nil)
     }
 
     @objc private func cancelOrClose() {
-        if let task { task.cancel(); status.stringValue = "Retranscription cancelled" } else { dismiss(nil) }
+        if let task { task.cancel(); status.stringValue = "Cancelled" } else { dismiss(nil) }
     }
 }

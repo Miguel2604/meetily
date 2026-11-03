@@ -126,7 +126,7 @@ final class GeneralPane: SettingsPane {
     override func viewDidLoad() {
         super.viewDidLoad()
         let settings = model.settings
-        language.addItems(withTitles: RetranscribeSheet.languages.map(\.name))
+        language.addItems(withTitles: TranscribeSheet.languages.map(\.name))
         language.target = self
         language.action = #selector(languageChosen)
         folder.lineBreakMode = .byTruncatingMiddle
@@ -149,13 +149,13 @@ final class GeneralPane: SettingsPane {
         ])
         track { [weak self] in
             guard let self else { return }
-            language.selectItem(at: RetranscribeSheet.languages.firstIndex { $0.code == self.model.settings.language } ?? 0)
+            language.selectItem(at: TranscribeSheet.languages.firstIndex { $0.code == self.model.settings.language } ?? 0)
             folder.stringValue = (model.settings.saveFolder.path as NSString).abbreviatingWithTildeInPath
             folder.toolTip = model.settings.saveFolder.path
         }
     }
 
-    @objc private func languageChosen() { model.settings.language = RetranscribeSheet.languages[language.indexOfSelectedItem].code }
+    @objc private func languageChosen() { model.settings.language = TranscribeSheet.languages[language.indexOfSelectedItem].code }
     @objc private func recordingNotices(_ sender: NSButton) { model.settings.recordingNotifications = sender.state == .on }
     @objc private func summaryNotices(_ sender: NSButton) { model.settings.summaryNotifications = sender.state == .on }
 

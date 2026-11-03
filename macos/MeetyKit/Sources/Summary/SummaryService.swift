@@ -258,6 +258,16 @@ public actor SummaryService {
         return SummaryRun(processID: processID, task: task)
     }
 
+    /// Starts a summary with the saved provider and model (auto summary after a recording stops).
+    /// Nil when no model is saved or the meeting has no transcript.
+    public func startWithSavedModel(meetingID: String, templateID: String, language: String?) async throws -> SummaryRun? {
+        guard let config = try await store.modelConfig(), !config.model.isEmpty else { return nil }
+        let transcripts = try await store.transcripts(meetingID: meetingID)
+        guard !transcripts.isEmpty else { return nil }
+        return try await start(meetingID: meetingID, text: SummaryText.input(transcripts).text, provider: config.provider,
+                               model: config.model, templateID: templateID, summaryLanguage: language)
+    }
+
     /// Cancels the run with this id; false when it is not the active run or it already finished.
     public func cancel(meetingID: String, processID: String) async throws -> Bool {
         guard let run = running[meetingID], run.processID == processID else { return false }
