@@ -226,7 +226,11 @@ impl WhisperEngine {
                         if file_size_mb >= expected_min_size_mb && file_size_mb > 1 {
                             // File size looks good, but let's also check if it's a valid GGML file
                             match self.validate_model_file(&model_path).await {
-                                Ok(_) => ModelStatus::Available,
+                                Ok(_) if coreml_encoder_installed(models_dir, filename) => ModelStatus::Available,
+                                Ok(_) => {
+                                    log::warn!("{} has no Core ML encoder (interrupted download?); offering a re-download", filename);
+                                    ModelStatus::Missing
+                                }
                                 Err(_) => {
                                     log::warn!("Model file {} has correct size but appears corrupted (failed validation)",
                                              filename);
@@ -1131,7 +1135,7 @@ impl WhisperEngine {
                 )
                 .await;
             result = match encoder_result {
-                Ok(()) => unzip(&zip_path, &self.models_dir).await,
+                Ok(()) => self.install_encoder(&zip_path, &encoder_dir).await,
                 Err(error) => Err(error),
             };
             let _ = fs::remove_file(&zip_path).await;
@@ -1142,6 +1146,27 @@ impl WhisperEngine {
 
         self.finish_download(model_name, &active_download, &file_path, result)
             .await
+    }
+
+    /// Unpack into a scratch folder and rename into place, so an existing encoder folder is
+    /// always a complete one (discovery relies on that).
+    async fn install_encoder(&self, zip_path: &Path, encoder_dir: &Path) -> Result<()> {
+        let scratch = self.models_dir.join(format!(".encoder-unpack-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&scratch).await;
+        let unpacked = scratch.join(encoder_dir.file_name().unwrap_or_default());
+        let result = async {
+            unzip(zip_path, &scratch).await?;
+            if !unpacked.is_dir() {
+                return Err(anyhow!("{} did not contain {}", zip_path.display(), unpacked.display()));
+            }
+            let _ = fs::remove_dir_all(encoder_dir).await;
+            fs::rename(&unpacked, encoder_dir)
+                .await
+                .map_err(|e| anyhow!("Failed to install Core ML encoder: {}", e))
+        }
+        .await;
+        let _ = fs::remove_dir_all(&scratch).await;
+        result
     }
 
     async fn download_model_with_owner(
@@ -1328,6 +1353,10 @@ fn coreml_encoder_dir(model_filename: &str) -> String {
     format!("{}-encoder.mlmodelc", stem)
 }
 
+pub(crate) fn coreml_encoder_installed(models_dir: &Path, model_filename: &str) -> bool {
+    models_dir.join(coreml_encoder_dir(model_filename)).is_dir()
+}
+
 /// Unpack a zip into `dest` with macOS's bundled `ditto`.
 async fn unzip(zip_path: &Path, dest: &Path) -> Result<()> {
     let output = tokio::process::Command::new("/usr/bin/ditto")
@@ -1387,6 +1416,76 @@ mod tests {
         assert_eq!(coreml_encoder_dir("ggml-large-v3-turbo.bin"), "ggml-large-v3-turbo-encoder.mlmodelc");
         assert_eq!(coreml_encoder_dir("ggml-small.en-q5_1.bin"), "ggml-small.en-encoder.mlmodelc");
         assert_eq!(coreml_encoder_dir("ggml-large-v3-q5_0.bin"), "ggml-large-v3-encoder.mlmodelc");
+    }
+
+    fn install_fake_encoder(model_path: &Path) {
+        let filename = model_path.file_name().unwrap().to_str().unwrap();
+        std::fs::create_dir_all(model_path.with_file_name(coreml_encoder_dir(filename))).unwrap();
+    }
+
+    #[tokio::test]
+    async fn encoder_zip_is_installed_whole_and_scratch_is_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = WhisperEngine::new_with_models_dir(Some(dir.path().join("models"))).unwrap();
+        let models_dir = engine.get_models_directory().await;
+        std::fs::create_dir_all(&models_dir).unwrap();
+        let name = coreml_encoder_dir("ggml-large-v3-turbo-q8_0.bin");
+
+        // Same layout as the upstream zip: one top-level .mlmodelc folder.
+        let source = dir.path().join("src").join(&name);
+        std::fs::create_dir_all(source.join("weights")).unwrap();
+        std::fs::write(source.join("weights/weight.bin"), b"w").unwrap();
+        let zip_path = dir.path().join("encoder.zip");
+        let status = std::process::Command::new("/usr/bin/ditto")
+            .args(["-c", "-k", "--keepParent"])
+            .arg(&source)
+            .arg(&zip_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let encoder_dir = models_dir.join(&name);
+        engine.install_encoder(&zip_path, &encoder_dir).await.unwrap();
+        assert_eq!(std::fs::read(encoder_dir.join("weights/weight.bin")).unwrap(), b"w");
+        let leftovers: Vec<_> = std::fs::read_dir(&models_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|n| n.starts_with(".encoder-unpack"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+
+        // A zip without the expected folder is an error and installs nothing.
+        std::fs::remove_dir_all(&encoder_dir).unwrap();
+        std::fs::write(dir.path().join("other.txt"), b"x").unwrap();
+        let bad_zip = dir.path().join("bad.zip");
+        std::process::Command::new("/usr/bin/ditto")
+            .args(["-c", "-k"])
+            .arg(dir.path().join("other.txt"))
+            .arg(&bad_zip)
+            .status()
+            .unwrap();
+        assert!(engine.install_encoder(&bad_zip, &encoder_dir).await.is_err());
+        assert!(!encoder_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn model_without_its_core_ml_encoder_is_offered_for_download_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = WhisperEngine::new_with_models_dir(Some(dir.path().to_path_buf())).unwrap();
+        let models_dir = engine.get_models_directory().await;
+        std::fs::create_dir_all(&models_dir).unwrap();
+        let model_path = models_dir.join("ggml-large-v3-turbo-q8_0.bin");
+        let mut file = std::fs::File::create(&model_path).unwrap();
+        std::io::Write::write_all(&mut file, b"ggml").unwrap();
+        file.set_len(800 * 1024 * 1024).unwrap();
+
+        // An app quit between the .bin and the encoder leaves exactly this on disk.
+        let models = engine.discover_models().await.unwrap();
+        assert!(matches!(test_model(&models).status, ModelStatus::Missing));
+
+        install_fake_encoder(&model_path);
+        let models = engine.discover_models().await.unwrap();
+        assert!(matches!(test_model(&models).status, ModelStatus::Available));
     }
 
     fn test_model(models: &[ModelInfo]) -> &ModelInfo {
@@ -1468,6 +1567,7 @@ mod tests {
             .unwrap()
             .set_len(800 * 1024 * 1024)
             .unwrap();
+        install_fake_encoder(&model_path);
 
         engine.discover_models().await.unwrap();
         let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();
@@ -1659,6 +1759,7 @@ mod tests {
             .unwrap()
             .set_len(800 * 1024 * 1024)
             .unwrap();
+        install_fake_encoder(&model_path);
 
         engine.discover_models().await.unwrap();
         let active_download = engine.reserve_active_download(TEST_MODEL).await.unwrap();

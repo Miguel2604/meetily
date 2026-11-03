@@ -94,7 +94,9 @@ fn discover_models_standalone() -> Result<Vec<ModelInfo>, String> {
             match std::fs::metadata(&model_path) {
                 Ok(metadata) => {
                     let file_size_mb = metadata.len() / (1024 * 1024);
-                    if file_size_mb >= 1 {
+                    if file_size_mb >= 1
+                        && crate::whisper_engine::whisper_engine::coreml_encoder_installed(&whisper_dir, filename)
+                    {
                         ModelStatus::Available
                     } else {
                         ModelStatus::Missing
