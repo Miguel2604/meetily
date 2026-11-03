@@ -71,6 +71,17 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
     ]
 
     public static func named(_ name: String) -> BuiltInModel? { catalog.first { $0.name == name } }
+
+    /// The onboarding pick for this Mac (`recommend_summary_model`): Qwen 3.5 4B from 14 GB of RAM, else 2B.
+    public static func recommended(ramGB: UInt64 = ProcessInfo.processInfo.physicalMemory >> 30) -> BuiltInModel {
+        named(ramGB >= 14 ? "qwen3.5:4b" : "qwen3.5:2b")!
+    }
+
+    /// The best of the downloaded models (`summary_model_priority`): Qwen before Gemma, larger first.
+    public static func best(of names: [String]) -> BuiltInModel? {
+        let priority = ["gemma3:1b", "gemma3:4b", "qwen3.5:2b", "qwen3.5:4b"]
+        return names.filter(priority.contains).max { priority.firstIndex(of: $0)! < priority.firstIndex(of: $1)! }.flatMap(named)
+    }
 }
 
 public enum BuiltInError: Error, Equatable, CustomStringConvertible, LocalizedError {

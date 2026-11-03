@@ -193,3 +193,22 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(!text.contains("<|im_end|>") && !text.contains("<end_of_turn>") && !text.contains("<think>"))
     }
 }
+
+/// Port of the `commands.rs` recommendation tests.
+@Suite struct RecommendedModelTests {
+    @Test func `below the 14 GB floor it recommends Qwen 3.5 2B`() {
+        #expect(BuiltInModel.recommended(ramGB: 13).name == "qwen3.5:2b")
+    }
+
+    @Test func `at the 14 GB floor it recommends Qwen 3.5 4B`() {
+        #expect(BuiltInModel.recommended(ramGB: 14).name == "qwen3.5:4b")
+        #expect(BuiltInModel.recommended(ramGB: 24).name == "qwen3.5:4b")
+    }
+
+    @Test func `the best downloaded model prefers Qwen over Gemma, larger first`() {
+        #expect(BuiltInModel.best(of: ["gemma3:1b", "qwen3.5:2b", "gemma3:4b"])?.name == "qwen3.5:2b")
+        #expect(BuiltInModel.best(of: ["gemma3:1b", "gemma3:4b"])?.name == "gemma3:4b")
+        #expect(BuiltInModel.best(of: ["qwen3.5:4b", "qwen3.5:2b"])?.name == "qwen3.5:4b")
+        #expect(BuiltInModel.best(of: ["unknown"]) == nil)
+    }
+}
