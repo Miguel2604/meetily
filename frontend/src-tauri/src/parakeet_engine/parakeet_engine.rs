@@ -358,8 +358,16 @@ impl ParakeetEngine {
             let _ = fs::remove_dir_all(&dir).await;
         }
         let status = if result.is_ok() && !cancelled { ModelStatus::Available } else { ModelStatus::Missing };
-        self.set_status(model_name, status).await;
-        self.active_downloads.lock().await.remove(model_name);
+        {
+            // One critical section, in discover_models' lock order, so a concurrent discovery
+            // can't see the owner and overwrite the final status with Downloading.
+            let mut active_downloads = self.active_downloads.lock().await;
+            let mut available_models = self.available_models.write().await;
+            if let Some(model) = available_models.get_mut(model_name) {
+                model.status = status;
+            }
+            active_downloads.remove(model_name);
+        }
         active_download.completion.send_replace(true);
 
         if cancelled {
