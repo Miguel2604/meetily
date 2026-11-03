@@ -166,6 +166,22 @@ func systems(_ stub: Stub) -> [String] {
 
     let english = "The team reviewed the roadmap, discussed release blockers, and agreed to ship the beta on Friday."
 
+    @Test func `a run left pending by an earlier launch reads as interrupted and restores the backup`() async throws {
+        let first = try await service(fakeLLM()).start(meetingID: meetingID, text: english, provider: "openai", model: "m",
+                                                       templateID: "standard_meeting", summaryLanguage: nil)
+        await first.task.value
+        let slow = service(fakeLLM { _, _ in Reply(200, "{}", delay: .seconds(30)) })
+        let pending = try await slow.start(meetingID: meetingID, text: english, provider: "openai", model: "m",
+                                           templateID: "standard_meeting", summaryLanguage: nil)
+        #expect(try await slow.summary(meetingID: meetingID).status == "pending") // its own run is still live
+
+        let relaunched = service(fakeLLM()) // the app quit mid-run
+        let state = try await relaunched.summary(meetingID: meetingID)
+        #expect(state.status == "failed")
+        #expect(state.markdown?.contains("Ship Friday") == true)
+        pending.task.cancel()
+    }
+
     @Test func `a summary completes, stores Tauri-shaped JSON and renames the meeting`() async throws {
         let stub = fakeLLM()
         let run = try await service(stub).start(meetingID: meetingID, text: english, provider: "openai", model: "gpt-6-astra",

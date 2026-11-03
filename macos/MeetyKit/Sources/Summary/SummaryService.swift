@@ -221,6 +221,8 @@ public actor SummaryService {
     let templatesDirectory: URL?
     private var running: [String: (processID: String, task: Task<Void, Never>)] = [:]
     private var lastStart = Date.distantPast
+    /// Process ids this instance started; any other pending run was left behind by a launch that quit mid-run.
+    private var startedHere: Set<String> = []
 
     public init(store: Store, client: LLMClient = LLMClient(), builtIn: BuiltInModels,
                 apiKey: @escaping @Sendable (String) -> String? = { Keychain().get($0) },
@@ -239,6 +241,7 @@ public actor SummaryService {
         // Strictly increasing at the stored millisecond precision, so two quick starts never share an id.
         lastStart = max(Date(), lastStart.addingTimeInterval(0.001))
         let processID = Timestamp.string(from: lastStart)
+        startedHere.insert(processID)
         try await store.createOrResetProcess(meetingID: meetingID, startedAt: processID)
         do {
             try await store.saveTranscriptChunk(meetingID: meetingID, text: text, model: provider, modelName: model, chunkSize: 40000, overlap: 1000)
@@ -277,8 +280,13 @@ public actor SummaryService {
 
     public func summary(meetingID: String) async throws -> SummaryState {
         let name = try await store.meeting(id: meetingID)?.title
-        guard let process = try await store.summaryProcess(meetingID: meetingID) else {
+        guard var process = try await store.summaryProcess(meetingID: meetingID) else {
             return SummaryState(status: "idle", meetingName: name, processID: nil, end: nil, data: nil, error: nil)
+        }
+        if process.status.lowercased() == "pending", let start = process.startTime, !startedHere.contains(start),
+           try await store.failProcess(meetingID: meetingID, startedAt: start, error: "Summary generation was interrupted when Meety quit. Generate it again."),
+           let failed = try await store.summaryProcess(meetingID: meetingID) {
+            process = failed // restores the previous summary, so the pane stops waiting and Generate comes back
         }
         var status = process.status.lowercased(), error = process.error
         // Parsed whatever the status, so a summary restored after a cancel or failure still shows.
