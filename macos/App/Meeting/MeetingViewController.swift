@@ -124,7 +124,13 @@ final class MeetingViewController: NSSplitViewController {
         customPrompt.lineBreakMode = .byTruncatingTail
 
         let row1 = NSStackView(views: [tabs, NSView(), saveButton, copySummaryButton, exportButton])
-        let row2 = NSStackView(views: [generateButton, stopButton, templatePopup, modelPopup, languagePopup])
+        let row2 = NSStackView(views: [generateButton, stopButton, templatePopup])
+        let row3 = NSStackView(views: [modelPopup, languagePopup])
+        row3.distribution = .fillEqually
+        // A narrow pane truncates the pickers and drops Export, then Copy, instead of widening the window past the screen.
+        for v in [templatePopup, modelPopup, languagePopup, customPrompt] as [NSView] { v.setContentCompressionResistancePriority(.defaultLow, for: .horizontal) }
+        row1.setVisibilityPriority(.detachOnlyIfNecessary, for: exportButton)
+        row1.setVisibilityPriority(NSStackView.VisibilityPriority(rawValue: 900), for: copySummaryButton)
         let spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.startAnimation(nil)
@@ -148,12 +154,12 @@ final class MeetingViewController: NSSplitViewController {
                 v.topAnchor.constraint(equalTo: body.topAnchor), v.bottomAnchor.constraint(equalTo: body.bottomAnchor),
             ])
         }
-        let stack = NSStackView(views: [row1, row2, customPrompt, errorLabel, body])
+        let stack = NSStackView(views: [row1, row2, row3, customPrompt, errorLabel, body])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 0, right: 16)
-        for v in [row1, row2, customPrompt, errorLabel, body] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true }
+        for v in [row1, row2, row3, customPrompt, errorLabel, body] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true }
         body.setContentHuggingPriority(.defaultLow, for: .vertical)
         let root = SafeAreaContainer(stack)
         root.wantsLayer = true

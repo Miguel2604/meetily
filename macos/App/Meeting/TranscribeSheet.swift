@@ -54,6 +54,10 @@ final class TranscribeSheet: NSViewController {
         language.selectItem(at: Self.languages.firstIndex { $0.code == model.settings.language } ?? 0)
         engine.addItems(withTitles: Model.allCases.map(\.title))
         engine.selectItem(at: model.settings.language == "en" ? 0 : 2)
+        for popup in [language, engine] {
+            popup.target = self
+            popup.action = #selector(choiceChanged)
+        }
         progress.isIndeterminate = false
         progress.minValue = 0
         progress.maxValue = 1
@@ -150,6 +154,9 @@ final class TranscribeSheet: NSViewController {
         onDone(meetingID)
         dismiss(nil)
     }
+
+    /// A previous run's error no longer applies once the model or language changes.
+    @objc private func choiceChanged() { if task == nil, status.stringValue.hasPrefix("An error occurred") { status.stringValue = "" } }
 
     @objc private func cancelOrClose() {
         if let task { task.cancel(); status.stringValue = "Cancelled" } else { dismiss(nil) }
