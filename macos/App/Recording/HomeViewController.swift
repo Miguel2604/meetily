@@ -318,19 +318,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
 
     private func fillDevicePopups() {
         let settings = model.settings
-        micPopup.removeAllItems()
-        micPopup.addItem(withTitle: "Default microphone" + (AudioDevices.defaultInput().map { " (\($0.name))" } ?? ""))
-        for device in AudioDevices.inputs() {
-            micPopup.addItem(withTitle: device.name)
-            micPopup.lastItem?.representedObject = device.name
-        }
-        if let preferred = settings.preferredMicDevice {
-            if micPopup.indexOfItem(withTitle: preferred) < 0 {
-                micPopup.addItem(withTitle: "\(preferred) (disconnected)")
-                micPopup.lastItem?.representedObject = preferred
-            }
-            micPopup.selectItem(at: micPopup.indexOfItem(withRepresentedObject: preferred))
-        }
+        micPopup.fillMicrophones(preferred: settings.preferredMicDevice)
         systemPopup.removeAllItems()
         systemPopup.addItems(withTitles: ["System audio on", "Microphone only"])
         systemPopup.selectItem(at: settings.recordSystemAudio ? 0 : 1)
@@ -407,5 +395,24 @@ extension NSLayoutConstraint {
     func withPriority(_ priority: NSLayoutConstraint.Priority) -> NSLayoutConstraint {
         self.priority = priority
         return self
+    }
+}
+
+extension NSPopUpButton {
+    /// "Default microphone (name)", each input by name, and a missing preferred device marked disconnected.
+    /// Items carry the device name; the default item carries nil.
+    func fillMicrophones(preferred: String?) {
+        removeAllItems()
+        addItem(withTitle: "Default microphone" + (AudioDevices.defaultInput().map { " (\($0.name))" } ?? ""))
+        for device in AudioDevices.inputs() {
+            addItem(withTitle: device.name)
+            lastItem?.representedObject = device.name
+        }
+        guard let preferred else { return }
+        if indexOfItem(withRepresentedObject: preferred) < 0 {
+            addItem(withTitle: "\(preferred) (disconnected)")
+            lastItem?.representedObject = preferred
+        }
+        selectItem(at: indexOfItem(withRepresentedObject: preferred))
     }
 }

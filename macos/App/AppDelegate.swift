@@ -4,6 +4,7 @@ import Core
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var mainWindow: MainWindowController?
+    private var settingsWindow: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make()
@@ -25,12 +26,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.model = model
         mainWindow = main
         Task { await model.reloadMeetings() }
+        Task { _ = try? await Keychain().importKeys(from: store) } // D10: plaintext columns stay until cutover
         NSApp.activate()
         #if DEBUG
-        if let window = main.window { DebugSnapshot.scheduleIfRequested(window) }
+        DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? main.window }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
         if let id = ProcessInfo.processInfo.environment["MEETY_OPEN_MEETING"] { model.route = .meeting(id) }
+        if let tab = ProcessInfo.processInfo.environment["MEETY_SETTINGS_TAB"].flatMap(Int.init).flatMap(SettingsWindowController.Tab.init) {
+            showSettings(tab: tab)
+        }
         #endif
+    }
+
+    @objc func showSettings(_ sender: Any?) { showSettings(tab: nil) }
+
+    func showSettings(tab: SettingsWindowController.Tab?) {
+        guard let model else { return }
+        if settingsWindow == nil { settingsWindow = SettingsWindowController(model: model) }
+        settingsWindow?.show(tab)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

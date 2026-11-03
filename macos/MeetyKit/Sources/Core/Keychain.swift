@@ -6,7 +6,13 @@ public enum KeychainError: Error, Equatable { case status(OSStatus) }
 /// Provider API keys in the login keychain (D10), one generic password per provider id.
 public struct Keychain: Sendable {
     public let service: String
-    public init(service: String = "com.meetily.ai.api-keys") { self.service = service }
+    public init(service: String = Keychain.defaultService) { self.service = service }
+
+    /// Dev runs on a copy of the data (`MEETY_DATA_DIR`) keep their keys apart from the real ones.
+    public static var defaultService: String {
+        ProcessInfo.processInfo.environment["MEETY_DATA_DIR"].map { $0.isEmpty ? "com.meetily.ai.api-keys" : "com.meetily.ai.dev.api-keys" }
+            ?? "com.meetily.ai.api-keys"
+    }
 
     public static let providers = ["openai", "claude", "groq", "openrouter", "ollama", "custom-openai"]
 
@@ -39,7 +45,8 @@ public struct Keychain: Sendable {
 
     /// Copies keys from the `settings` row into the keychain, skipping providers that already have one.
     /// The plaintext columns are left untouched until cutover (D10). Returns how many keys were copied.
-    public func importKeys(from store: Store) async throws -> Int {
+    /// Off the main actor: a keychain read can block on an access prompt.
+    @concurrent public func importKeys(from store: Store) async throws -> Int {
         guard let row = try await store.modelConfig() else { return 0 }
         let customKey = row.customOpenAIConfig
             .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }?["apiKey"] as? String

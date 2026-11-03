@@ -17,6 +17,7 @@ final class AppModel {
     let whisper = WhisperModels(directory: Paths.whisperModels)
     let builtIn = BuiltInModels(directory: Paths.summaryModels)
     @ObservationIgnored private(set) lazy var summaries = SummaryService(store: store, builtIn: builtIn)
+    @ObservationIgnored private(set) lazy var library = ModelLibrary(app: self)
     /// The summary template picked last in this session.
     @ObservationIgnored var summaryTemplate = "standard_meeting"
     private(set) var meetings: [Meeting] = []

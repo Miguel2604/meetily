@@ -263,7 +263,7 @@ final class MeetingViewController: NSSplitViewController {
 
     @objc private func generate() {
         guard let choice = modelChoices.first.map({ _ in modelChoices[max(0, modelPopup.indexOfSelectedItem)] }) else {
-            NSApp.sendAction(Selector(("showSettings:")), to: nil, from: self)
+            (NSApp.delegate as? AppDelegate)?.showSettings(tab: .summary)
             return
         }
         let language = folderURL.flatMap(MeetingMetadata.summaryLanguage(in:)) ?? model.settings.summaryLanguage
