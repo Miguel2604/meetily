@@ -37,23 +37,33 @@ public final class SystemAudioCapture: @unchecked Sendable { // start/stop/drain
     private var ring = RingBuffer(capacity: 1 << 18)
     private var resampler: Resampler?
     private var outputListener: AudioObjectPropertyListenerBlock?
+    /// Between start and stop, even while a rebuild after an output change has failed (the next change retries).
+    private var running = false
+    private var retiredDrops = 0
+    /// Called on the capture queue when the tap can't be rebuilt after an output-device change.
+    public var onRebuildFailure: (@Sendable (Error) -> Void)?
     private let queue = DispatchQueue(label: "meety.system-audio", qos: .userInteractive)
 
     public init() {}
 
-    public var droppedSamples: Int { ring.droppedSamples }
+    public var droppedSamples: Int { queue.sync { retiredDrops + ring.droppedSamples } }
     public var isRunning: Bool { procID != nil }
 
     public func start() throws {
         stop()
         try buildTap()
+        queue.sync { running = true }
         var address = HAL.address(kAudioHardwarePropertyDefaultOutputDevice)
         let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             // Output device changed (headphones, AirPods): the tap follows the new device.
-            guard let self, self.procID != nil else { return }
+            guard let self, self.running else { return }
             let pending = self.ring.drain()
+            self.retiredDrops += self.ring.droppedSamples
             self.teardownTap()
-            try? self.buildTap(carrying: pending)
+            do { try self.buildTap(carrying: pending) } catch {
+                self.teardownTap() // a half-built tap
+                self.onRebuildFailure?(error)
+            }
         }
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, queue, listener)
         outputListener = listener
@@ -126,7 +136,10 @@ public final class SystemAudioCapture: @unchecked Sendable { // start/stop/drain
             AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, queue, listener)
             outputListener = nil
         }
-        queue.sync { teardownTap() }
+        queue.sync {
+            running = false
+            teardownTap()
+        }
     }
 
     private func teardownTap() {

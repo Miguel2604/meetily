@@ -107,6 +107,7 @@ final class AppModel {
         var system: SystemAudioCapture?
         if settings.recordSystemAudio {
             let capture = SystemAudioCapture()
+            capture.onRebuildFailure = { noticeSink.yield("System audio stopped after an output change: \($0). It retries on the next change.") }
             do { try capture.start(); system = capture } catch { noticeSink.yield("System audio unavailable: \(error)") }
         }
         guard microphone?.device != nil || system != nil else {
