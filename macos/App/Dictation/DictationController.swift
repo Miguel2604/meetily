@@ -60,6 +60,7 @@ final class DictationController {
         guard enabled != !monitors.isEmpty || (enabled && trusted != monitorsTrusted) else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+        ptt = PushToTalk() // a hold that began before the change would cancel the next real one
         guard enabled else {
             dictation.cancel()
             return
@@ -122,30 +123,43 @@ final class DictationController {
 
 /// Puts text into the focused app: the clipboard plus a synthetic ⌘V, then the previous clipboard comes back.
 enum Paste {
+    /// The clipboard from before a paste whose restore is still pending, and the change count right after that paste.
+    private static var pending: (saved: [NSPasteboardItem], ours: Int, restore: Task<Void, Never>)?
+
     static func insert(_ text: String) {
         let board = NSPasteboard.general
-        let saved: [NSPasteboardItem] = board.pasteboardItems?.map { item in
-            let copy = NSPasteboardItem()
-            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
-            return copy
-        } ?? []
+        pending?.restore.cancel()
+        // A paste inside the previous one's restore window keeps the original clipboard, unless the user copied since.
+        let saved = pending.flatMap { $0.ours == board.changeCount ? $0.saved : nil } ?? snapshot(board)
+        pending = nil
         board.clearContents()
         board.setString(text, forType: .string)
         board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType")) // clipboard managers skip it
         guard AXIsProcessTrusted() else { return } // without Accessibility the text stays on the clipboard to paste by hand
-        let ours = board.changeCount
         let source = CGEventSource(stateID: .combinedSessionState)
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: down) // 9: V
             event?.flags = .maskCommand
             event?.post(tap: .cghidEventTap)
         }
+        let ours = board.changeCount
         // The target app reads the clipboard as it handles ⌘V; restore after that, unless something else copied since.
-        Task {
+        let restore = Task {
             try? await Task.sleep(for: .seconds(1))
-            guard board.changeCount == ours, !saved.isEmpty else { return }
+            guard !Task.isCancelled else { return }
+            pending = nil
+            guard board.changeCount == ours else { return }
             board.clearContents()
             board.writeObjects(saved)
+        }
+        pending = (saved, ours, restore)
+    }
+
+    private static func snapshot(_ board: NSPasteboard) -> [NSPasteboardItem] {
+        (board.pasteboardItems ?? []).map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
+            return copy
         }
     }
 }
