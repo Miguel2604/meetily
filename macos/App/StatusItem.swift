@@ -21,9 +21,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         for entry in [record, pause] { entry.target = self }
         let open = NSMenuItem(title: "Open Meety", action: #selector(openWindow), keyEquivalent: "")
         open.target = self
-        menu.items = [state, .separator(), record, pause, .separator(), open,
-                      NSMenuItem(title: "Settings…", action: #selector(AppDelegate.showSettings(_:)), keyEquivalent: ""),
-                      .separator(), NSMenuItem(title: "Quit Meety", action: #selector(AppDelegate.quit(_:)), keyEquivalent: "")]
+        let settings = NSMenuItem(title: "Settings…", action: #selector(AppDelegate.showSettings(_:)), keyEquivalent: "")
+        let quit = NSMenuItem(title: "Quit Meety", action: #selector(AppDelegate.quit(_:)), keyEquivalent: "")
+        for (entry, symbol) in [(open, "macwindow"), (settings, "gearshape"), (quit, "power")] { entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        menu.items = [state, .separator(), record, pause, .separator(), open, settings, .separator(), quit]
         item.menu = menu
         track { [weak self] in self?.render() }
     }
@@ -36,8 +37,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         case .starting, .stopping: ("ellipsis.circle", "Meety, busy")
         case .idle, .failed: ("waveform", "Meety")
         }
-        item.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        item.button?.image?.isTemplate = true
+        // Red while recording, like the system's own recording indicators; a template image otherwise.
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        item.button?.image = phase == .recording ? image?.withSymbolConfiguration(.init(paletteColors: [.systemRed])) : image
+        item.button?.image?.isTemplate = phase != .recording
         item.button?.toolTip = label
         updateMenu()
     }
@@ -57,6 +60,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         }
         let live = recorder.phase == .recording || recorder.phase == .paused
         record.title = live ? "Stop Recording" : "Start Recording"
+        record.image = NSImage(systemSymbolName: live ? "stop.circle" : "record.circle", accessibilityDescription: nil)
+        pause.image = NSImage(systemSymbolName: recorder.phase == .paused ? "play.circle" : "pause.circle", accessibilityDescription: nil)
         record.isEnabled = live || recorder.phase == .idle || { if case .failed = recorder.phase { true } else { false } }()
         pause.title = recorder.phase == .paused ? "Resume Recording" : "Pause Recording"
         pause.isHidden = !live

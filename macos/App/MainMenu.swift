@@ -57,6 +57,12 @@ enum MainMenu {
 
         let help = submenu(main, "Help")
         NSApp.helpMenu = help
+        // Symbols for Meety's own commands; AppKit adds them for the standard ones.
+        let symbols = ["New Recording": "record.circle", "Pause Recording": "pause.circle", "Stop Recording": "stop.circle",
+                       "Import Audio…": "square.and.arrow.down", "Find": "magnifyingglass", "Toggle Sidebar": "sidebar.left"]
+        for item in [file, edit, view].flatMap(\.items) {
+            if let symbol = symbols[item.title] { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        }
         return main
     }
 
