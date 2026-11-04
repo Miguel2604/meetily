@@ -18,6 +18,7 @@ final class DictationController {
     @ObservationIgnored private var monitors: [Any] = []
     @ObservationIgnored private var monitorsTrusted = false
     @ObservationIgnored private var polling = false
+    @ObservationIgnored private var asked = false
     @ObservationIgnored private lazy var dictation = Dictation(
         capture: { [settings = model.settings] in
             let device = MicResolution.resolve(requested: settings.preferredMicDevice, inputs: AudioDevices.inputs(),
@@ -28,7 +29,9 @@ final class DictationController {
         },
         engine: { [model] in try await model.transcriptionEngine() },
         clean: { [weak self] raw in await self?.clean(raw) ?? raw },
-        deliver: { Paste.insert($0) })
+        deliver: { [weak self] text in
+            if !Paste.insert(text) { self?.overlay.flash("Copied. Press ⌘V, or allow Accessibility in Settings › Dictation to paste") }
+        })
 
     init(model: AppModel) {
         self.model = model
@@ -50,6 +53,10 @@ final class DictationController {
         let enabled = model.settings.dictationEnabled
         let trusted = AXIsProcessTrusted()
         if accessibilityGranted != trusted { accessibilityGranted = trusted }
+        if enabled, !trusted, !asked {
+            asked = true
+            requestAccessibility() // once per launch: lists this build in System Settings, ready to switch on
+        }
         if enabled, !trusted, !polling {
             polling = true
             Task { [weak self] in
@@ -130,7 +137,8 @@ enum Paste {
     /// The clipboard from before a paste whose restore is still pending, and the change count right after that paste.
     private static var pending: (saved: [NSPasteboardItem], ours: Int, restore: Task<Void, Never>)?
 
-    static func insert(_ text: String) {
+    /// False when Accessibility is off: the text is left on the clipboard to paste by hand.
+    @discardableResult static func insert(_ text: String) -> Bool {
         let board = NSPasteboard.general
         pending?.restore.cancel()
         // A paste inside the previous one's restore window keeps the original clipboard, unless the user copied since.
@@ -139,7 +147,7 @@ enum Paste {
         board.clearContents()
         board.setString(text, forType: .string)
         board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType")) // clipboard managers skip it
-        guard AXIsProcessTrusted() else { return } // without Accessibility the text stays on the clipboard to paste by hand
+        guard AXIsProcessTrusted() else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: down) // 9: V
@@ -157,6 +165,7 @@ enum Paste {
             board.writeObjects(saved)
         }
         pending = (saved, ours, restore)
+        return true
     }
 
     private static func snapshot(_ board: NSPasteboard) -> [NSPasteboardItem] {
