@@ -21,11 +21,6 @@ enum Typography {
     }
 }
 
-enum Metrics {
-    static let radius: CGFloat = 12
-    static let gutter: CGFloat = 16
-}
-
 extension NSTextField {
     /// A non-editable, wrapping label in the house type scale.
     static func meety(_ text: String, font: NSFont = Typography.body, color: NSColor = .labelColor) -> NSTextField {

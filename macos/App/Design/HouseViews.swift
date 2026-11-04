@@ -54,7 +54,7 @@ class CardView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = Metrics.radius
+        layer?.cornerRadius = 12
         layer?.cornerCurve = .continuous
     }
 

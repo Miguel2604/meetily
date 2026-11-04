@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="docs/Meetily-6.png" style="border-radius: 10px;" />
+    <img src="docs/redesign/meeting-light.png" style="border-radius: 10px;" />
     <h3>Privacy-first AI meeting assistant for macOS</h3>
 </div>
 

@@ -217,15 +217,6 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
 
     private var consentCheckbox: NSButton?
 
-    private func pin(_ child: NSView, in parent: NSView, inset: CGFloat) {
-        NSLayoutConstraint.activate([
-            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: inset),
-            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -inset),
-            child.topAnchor.constraint(equalTo: parent.topAnchor, constant: inset),
-            child.bottomAnchor.constraint(equalTo: parent.bottomAnchor, constant: -inset),
-        ])
-    }
-
     // MARK: Render
 
     private func renderPhase() {

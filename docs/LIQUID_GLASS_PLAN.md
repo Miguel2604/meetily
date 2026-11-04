@@ -16,7 +16,7 @@ Branch: `redesign/liquid-glass`, off `enhance/swift-port`. Still AppKit, built i
 | G6 | Corners follow their container: layout guides from `layoutGuide(for: .safeArea(cornerAdaptation:))`, capsules for floating bars. No fixed 8 pt radius. | Liquid Glass corners are concentric with the window. |
 | G7 | Search moves from the sidebar into an `NSSearchToolbarItem`. It still filters the sidebar and still searches transcripts. | Notes and Mail do this on 26. The sidebar gets lighter. |
 | G8 | The Home screen drops its "Recent meetings" list. The sidebar already shows them. | The same list twice is noise. The hero Record button gets the room. |
-| G9 | Summary edits autosave with a 1 s debounce, the same as notes. The Save button goes away. ⌘S still saves. | Apple apps don't have Save buttons for documents. |
+| G9 | Summary edits autosave with a 1 s debounce, the same as notes. The Save button goes away. Leaving the meeting or quitting saves too. | Apple apps don't have Save buttons for documents. |
 | G10 | Each screen gets a light and a dark snapshot before its slice is committed. Snapshots go in `docs/redesign/` and are linked from the phase report. | UI is checked by running the app (CLAUDE.md). The snapshots are the before/after record. |
 
 ## Target design
@@ -147,3 +147,27 @@ Each slice: build, launch it in a scratch data dir (CLAUDE.md, Data safety), tak
 - **Morph animation.** AppKit has no SwiftUI-style `glassEffectID`. Glass shapes merge only as their frames come within the container's `spacing`. G6 is optional for that reason.
 - **Behavior changes** a user will notice: search moves to the toolbar (G7), the recent list on Home goes away (G8), summary autosave (G9), copy and export move into Share and More. Approved 2026-11-04.
 - **Window frame autosave.** The new toolbar and inspector change the saved frames. Delete the autosave keys after dev runs, as CLAUDE.md says, plus `NSSplitView Subview Frames MeetingSplit`.
+
+## Status (2026-11-04)
+
+G0–G5 and G7–G12 shipped and G14's cleanup is done; G6 was dropped and G13 waits for a yes. Each slice is its own commit on `redesign/liquid-glass`. `scripts/test.sh` is green: the MeetyKit suites pass, including two new autosave tests, and the app builds. Snapshots: [docs/redesign/](redesign/).
+
+| Home | Recording | Meeting |
+|---|---|---|
+| ![](redesign/home-light.png) | ![](redesign/recording-light.png) | ![](redesign/meeting-light.png) |
+| ![](redesign/home-dark.png) | ![](redesign/recording-dark.png) | ![](redesign/meeting-dark.png) |
+
+| Settings | Import | Welcome |
+|---|---|---|
+| ![](redesign/settings-general-light.png) ![](redesign/settings-summary-dark.png) | ![](redesign/import-dark.png) | ![](redesign/welcome-light.png) |
+
+What changed from the plan:
+
+- **G0.** No `scripts/snapshot.sh`. `MEETY_SNAPSHOT` runs `screencapture -l` from the app itself, with `cacheDisplay` as a fallback, and `MEETY_APPEARANCE` picks light or dark. Snapshot windows are never key, so prominent tints (red Record, blue buttons) look gray in them. Sheets and the Settings window do show the active state.
+- **G2.** The sidebar is the system's stock `NSSplitViewItem` sidebar. On this Mac (macOS 27.0) it draws edge to edge, not floating, even in a bare test window, so `NSBackgroundExtensionView` wasn't needed.
+- **G6.** Dropped. AppKit has no matched-geometry glass morph. The Record button switches to the recording bar instantly.
+- **G7 and G8.** Done in one pass. The meeting toolbar items (Summary/Notes, Generate with options popover, Share, More, Transcript) appear only on a meeting route. Transcript rows put the time above the text so they fit the inspector.
+- **G9.** Settings panes scroll and the window is capped to the screen. `FormSection` rows pad with required constraints, because stack view insets collapse under a fitting-size window.
+- **Bug fixed along the way.** The sidebar crashed (index out of range) when a recording started before the meeting list had loaded.
+
+Not checked by a person yet: the active-window look (red Record and Stop tints, hero button), the Generate popover, Share, the More menu, the drop overlay, the menu bar icon and menu symbols, Reduce Transparency, Increase Contrast and Reduce Motion. These need clicks or system settings that unattended snapshots can't reach.
