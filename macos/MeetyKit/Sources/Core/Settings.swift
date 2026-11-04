@@ -25,8 +25,11 @@ public final class Settings {
     public var builtInSummaryModel: String? { didSet { defaults.set(builtInSummaryModel, forKey: "builtInSummaryModel") } }
     /// Hold Right Option to dictate into any app.
     public var dictationEnabled: Bool { didSet { defaults.set(dictationEnabled, forKey: "dictationEnabled") } }
-    /// `CleanupMode` raw value: off, onDevice or summaryModel.
+    /// `CleanupMode` raw value: off, onDevice, summaryModel or dictationModel.
     public var dictationCleanup: String { didSet { defaults.set(dictationCleanup, forKey: "dictationCleanup") } }
+    /// The `Provider` raw value and model name for the dictationModel cleanup; its key is the provider's Keychain entry.
+    public var dictationProvider: String { didSet { defaults.set(dictationProvider, forKey: "dictationProvider") } }
+    public var dictationModel: String { didSet { defaults.set(dictationModel, forKey: "dictationModel") } }
 
     public static let defaultSaveFolder = URL.moviesDirectory.appending(path: "meety-recordings", directoryHint: .isDirectory)
 
@@ -50,6 +53,8 @@ public final class Settings {
         builtInSummaryModel = defaults.string(forKey: "builtInSummaryModel")
         dictationEnabled = defaults.bool(forKey: "dictationEnabled")
         dictationCleanup = defaults.string(forKey: "dictationCleanup") ?? "onDevice"
+        dictationProvider = defaults.string(forKey: "dictationProvider") ?? "claude"
+        dictationModel = defaults.string(forKey: "dictationModel") ?? ""
     }
 
     private static func importTauriStores(from dir: URL, into defaults: UserDefaults) {

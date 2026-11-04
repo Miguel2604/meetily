@@ -9,6 +9,8 @@ public enum CleanupMode: String, CaseIterable, Sendable {
     case onDevice
     /// The provider and model saved for summaries.
     case summaryModel
+    /// A provider and model for dictation alone (`Settings.dictationProvider`, `dictationModel`).
+    case dictationModel
 }
 
 /// Punctuation, fillers and self-corrections out of a raw dictation. Never fails: anything but a plausible cleanup

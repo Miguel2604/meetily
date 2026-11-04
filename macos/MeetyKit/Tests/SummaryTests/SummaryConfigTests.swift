@@ -26,6 +26,14 @@ import Testing
         #expect(loaded.provider == .claude && loaded.model == "claude-opus-5-5" && loaded.apiKey == "sk-ant")
     }
 
+    @Test func `the dictation model uses the provider's saved key and nothing from the summary row`() async throws {
+        defer { clean() }
+        try await SummaryConfig(provider: .claude, model: "claude-opus-5-5", apiKey: "sk-ant").save(store: store, keychain: keychain)
+        let config = await SummaryConfig.dictation(provider: .claude, model: "claude-haiku-5-5", keychain: keychain)
+        #expect(config == SummaryConfig(provider: .claude, model: "claude-haiku-5-5", apiKey: "sk-ant"))
+        #expect(await SummaryConfig.dictation(provider: .groq, model: "m", keychain: keychain).apiKey.isEmpty)
+    }
+
     @Test func `the custom endpoint round-trips and keeps a legacy key in its JSON`() async throws {
         defer { clean() }
         try await store.saveCustomOpenAIConfig(#"{"endpoint":"http://old","apiKey":"legacy","model":"x"}"#)

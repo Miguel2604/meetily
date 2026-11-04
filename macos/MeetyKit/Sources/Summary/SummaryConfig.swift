@@ -42,6 +42,14 @@ public struct SummaryConfig: Sendable, Equatable {
         return config
     }
 
+    /// A model for dictation alone: the provider's saved key and nothing else from the summary settings.
+    /// shortcut: Ollama always runs on its default localhost endpoint; take the summary row's endpoint if anyone needs another.
+    @concurrent public static func dictation(provider: Provider, model: String, keychain: Keychain = Keychain()) async -> SummaryConfig {
+        var config = SummaryConfig(provider: provider, model: model)
+        if config.takesKey { config.apiKey = keychain.get(provider.rawValue) ?? "" }
+        return config
+    }
+
     public func validate() throws(LLMError) {
         func web(_ url: String) -> Bool { url.hasPrefix("http://") || url.hasPrefix("https://") }
         guard !model.trimmingCharacters(in: .whitespaces).isEmpty else { throw .message("Choose a model.") }

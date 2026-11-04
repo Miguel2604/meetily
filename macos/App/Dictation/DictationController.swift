@@ -128,6 +128,11 @@ final class DictationController {
         case .summaryModel:
             guard let config = try? await SummaryConfig.load(store: model.store) else { return raw }
             return await DictationCleanup.clean(raw, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
+        case .dictationModel:
+            let name = model.settings.dictationModel
+            guard let provider = Provider(id: model.settings.dictationProvider), !name.isEmpty else { return raw }
+            let config = await SummaryConfig.dictation(provider: provider, model: name)
+            return await DictationCleanup.clean(raw, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
         }
     }
 }
