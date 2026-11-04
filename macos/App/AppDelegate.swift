@@ -50,7 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showMainWindow(nil)
             model?.route = .meeting(id)
         }
-        Task { _ = try? await Keychain().importKeys(from: store) } // D10: plaintext columns stay until cutover
+        var importKeys = true
+        #if DEBUG
+        importKeys = !DebugSnapshot.isActive
+        #endif
+        if importKeys { Task { _ = try? await Keychain().importKeys(from: store) } } // D10: plaintext columns stay until cutover
         NSApp.activate()
         DispatchQueue.main.async { Self.logLaunchTime() }
         #if DEBUG

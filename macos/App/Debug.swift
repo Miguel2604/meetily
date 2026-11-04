@@ -4,6 +4,9 @@ import AppKit
 /// `MEETY_SNAPSHOT=/path.png` captures the front window to a PNG after launch and quits.
 /// `MEETY_APPEARANCE=light|dark` forces the appearance.
 enum DebugSnapshot {
+    /// Snapshot runs don't import keys: an item written by one Debug build prompts when the next build reads it.
+    static var isActive: Bool { ProcessInfo.processInfo.environment["MEETY_SNAPSHOT"] != nil }
+
     /// `window` is asked at snapshot time, so a window opened after launch (Settings) can be captured.
     static func scheduleIfRequested(_ window: @escaping () -> NSWindow?) {
         let env = ProcessInfo.processInfo.environment

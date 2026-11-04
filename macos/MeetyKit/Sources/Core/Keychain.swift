@@ -9,8 +9,11 @@ public struct Keychain: Sendable {
     public init(service: String = Keychain.defaultService) { self.service = service }
 
     /// Dev runs on a copy of the data (`MEETY_DATA_DIR`) keep their keys apart from the real ones.
+    /// Snapshot runs (`MEETY_SNAPSHOT`) read an empty service: each Debug build re-signs ad hoc, so reading saved keys would prompt.
     public static var defaultService: String {
-        ProcessInfo.processInfo.environment["MEETY_DATA_DIR"].map { $0.isEmpty ? "com.meetily.ai.api-keys" : "com.meetily.ai.dev.api-keys" }
+        let env = ProcessInfo.processInfo.environment
+        if env["MEETY_SNAPSHOT"] != nil { return "com.meetily.ai.snapshot.api-keys" }
+        return env["MEETY_DATA_DIR"].map { $0.isEmpty ? "com.meetily.ai.api-keys" : "com.meetily.ai.dev.api-keys" }
             ?? "com.meetily.ai.api-keys"
     }
 
