@@ -178,15 +178,26 @@ final class MeetingViewController: NSSplitViewController, NSMenuItemValidation {
         grid.rowSpacing = 10
         grid.columnSpacing = 8
         grid.rowAlignment = .firstBaseline
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).xPlacement = .fill
         grid.column(at: 1).width = 260
         let go = NSButton.meety("Generate Summary", symbol: "sparkles", role: .primary, target: self, action: #selector(generateFromOptions))
         go.keyEquivalent = "\r"
         let stack = NSStackView(views: [grid, go])
         stack.orientation = .vertical
         stack.alignment = .trailing
-        stack.spacing = 16
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
-        options.contentViewController = Placeholder(stack)
+        stack.spacing = 20
+        // The popover ignores a root stack's edge insets, so a plain container holds the margins.
+        let root = NSView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -20),
+        ])
+        options.contentViewController = Placeholder(root)
         options.behavior = .transient
     }
 
