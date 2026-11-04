@@ -100,7 +100,7 @@ import Testing
         #expect(delivered.texts.isEmpty)
     }
 
-    @Test func `a second start while busy is ignored`() async throws {
+    @Test func `a second start while listening is ignored`() async throws {
         let delivered = Delivered()
         var captures = 0
         let mic = SampleSource(samples: tone(1, rate: 48_000))
@@ -111,6 +111,26 @@ import Testing
         #expect(captures == 1)
         _ = try await d.finish()
         #expect(delivered.texts == ["words 1.0"])
+    }
+
+    @Test func `the next dictation can start while one is still cleaning, and pastes keep their order`() async throws {
+        let delivered = Delivered()
+        var mics = [SampleSource(samples: tone(1, rate: 48_000)), SampleSource(samples: tone(2, rate: 48_000))]
+        let d = Dictation(capture: { mics.removeFirst() }, engine: { FakeEngine() }, clean: { raw in
+            if raw.hasSuffix("1.0") { try? await Task.sleep(for: .milliseconds(200)) }
+            return raw
+        }, deliver: { delivered.texts.append($0) })
+        d.tail = .zero
+        try d.start()
+        async let first = d.finish()
+        while d.phase != .cleaning { await Task.yield() }
+        try d.start()
+        #expect(d.phase == .listening)
+        let second = try await d.finish()
+        #expect(try await first == "words 1.0")
+        #expect(second == "words 2.0")
+        #expect(delivered.texts == ["words 1.0", "words 2.0"])
+        #expect(d.phase == .idle)
     }
 
     @Test func `engine errors reach the caller and leave it idle`() async throws {
