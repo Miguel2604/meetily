@@ -24,7 +24,7 @@ let package = Package(
             url: "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-b5454-xcframework.zip",
             checksum: "e57f8c48933000acabc13bb913fbe82805d483a2deff692cc6738836bd92393b"),
         .target(name: "Summary", dependencies: ["Core", "llama"], resources: [.copy("Resources/templates")]),
-        // llama.cpp b12091 (Nov 2026): Metal, and the qwen35 and gemma4 architectures plus Metal 4 tensor (M5 Neural Accelerator) kernels.
+        // llama.cpp b12091 (Nov 2026): Metal, and the qwen35 architecture plus Metal 4 tensor (M5 Neural Accelerator) kernels.
         .binaryTarget(
             name: "llama",
             url: "https://github.com/ggml-org/llama.cpp/releases/download/b12091/llama-b12091-xcframework.zip",

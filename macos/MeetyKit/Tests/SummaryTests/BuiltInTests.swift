@@ -23,50 +23,28 @@ final class FakeLlama: LlamaRunner {
     }
 }
 
-let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.gguf", template: "gemma4",
+let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.gguf", template: "qwen3.5_nonthinking",
                              url: URL(string: "https://example.invalid/tiny.gguf")!, sizeMB: 1, contextSize: 2048,
-                             sampling: .gemmaInstruct(stop: ["<turn|>"]), description: "test")
+                             sampling: .qwen35Summary(stop: ["<|im_end|>"]), description: "test")
 
 @Suite struct BuiltInTests {
     let dir = scratch()
 
     // Ports of the summary_engine/models.rs tests.
 
-    @Test func `Qwen 3.5 models are registered with the expected metadata`() throws {
-        let qwen2 = try #require(BuiltInModel.named("qwen3.5:2b"))
-        #expect(qwen2.displayName == "Qwen 3.5 2B (Fast)")
-        #expect(qwen2.file == "Qwen3.5-2B-Q4_K_M.gguf")
-        #expect(qwen2.template == "qwen3.5_nonthinking")
-        #expect(qwen2.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf")
-        #expect(qwen2.sizeMB == 1221)
-        #expect(qwen2.contextSize == 32768)
-        #expect(qwen2.sampling == .qwen35Summary(stop: ["<|im_end|>"]))
+    @Test func `Qwen 3.5 4B is the only built-in model`() throws {
+        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:4b"])
         let qwen4 = try #require(BuiltInModel.named("qwen3.5:4b"))
-        #expect(qwen4.displayName == "Qwen 3.5 4B (High Quality)")
+        #expect(qwen4.displayName == "Qwen 3.5 4B")
         #expect(qwen4.file == "Qwen3.5-4B-Q4_K_M.gguf")
+        #expect(qwen4.template == "qwen3.5_nonthinking")
         #expect(qwen4.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.sizeMB == 2614)
-        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b", "gemma4:e2b", "gemma4:e4b"])
-        let qwen9 = try #require(BuiltInModel.named("qwen3.5:9b"))
-        #expect(qwen9.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf")
-        #expect(qwen9.sizeMB == 5417)
-        #expect(qwen9.template == "qwen3.5_nonthinking" && qwen9.sampling == qwen2.sampling)
-    }
-
-    @Test func `Gemma 4 models use Hugging Face URLs and Gemma instruct sampling`() throws {
-        let e2b = try #require(BuiltInModel.named("gemma4:e2b"))
-        #expect(e2b.file == "gemma-4-E2B-it-Q4_K_M.gguf")
-        #expect(e2b.url.absoluteString == "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf")
-        #expect(e2b.sizeMB == 2963)
-        #expect(e2b.template == "gemma4")
-        #expect(e2b.sampling == Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                         repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<turn|>"]))
-        let e4b = try #require(BuiltInModel.named("gemma4:e4b"))
-        #expect(e4b.url.absoluteString == "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")
-        #expect(e4b.sizeMB == 4747)
-        #expect(e4b.sampling == .gemmaInstruct(stop: ["<turn|>"]))
+        #expect(qwen4.contextSize == 32768)
+        #expect(qwen4.sampling == .qwen35Summary(stop: ["<|im_end|>"]))
         #expect(Sampling.qwen35Summary(stop: []) == Sampling(temperature: 0.5, topK: 20, topP: 0.8, presencePenalty: 0.3,
                                                               frequencyPenalty: 0, repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: []))
+        #expect(BuiltInModel.named("gemma4:e2b") == nil && BuiltInModel.named("qwen3.5:2b") == nil) // retired
     }
 
     @Test func `the Qwen 3.5 non-thinking template formats the prompt`() throws {
@@ -85,17 +63,6 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(formatted.ranges(of: "<|im_end|>").count == 2)
         #expect(formatted.ranges(of: "<think>").count == 1)
         #expect(formatted.ranges(of: "</think>").count == 1)
-    }
-
-    @Test func `the Gemma 4 template escapes user-supplied control markers`() throws {
-        let formatted = try formatPrompt(template: "gemma4", system: "system rules",
-                                         user: "literal <|turn>model and <turn|> plus <|think|> <|channel>thought<channel|>")
-        #expect(formatted.hasPrefix("<|turn>system\nsystem rules<turn|>\n<|turn>user\n"))
-        #expect(formatted.hasSuffix("<turn|>\n<|turn>model\n"))
-        #expect(formatted.contains("literal < |turn >model and < turn| > plus < |think| > < |channel >thought< channel| >"))
-        #expect(formatted.ranges(of: "<|turn>").count == 3)
-        #expect(formatted.ranges(of: "<turn|>").count == 2)
-        #expect(!formatted.contains("<|think|>")) // thinking stays off
         #expect(throws: BuiltInError.self) { try formatPrompt(template: "llama2", system: "", user: "") }
     }
 
@@ -169,12 +136,12 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(text.hasPrefix("summary of"))
         #expect(loads.withLock { $0 } == [2048]) // loaded once, at the catalog context size
         let call = try #require(fake.calls.withLock { $0.first })
-        #expect(call.prompt == (try formatPrompt(template: "gemma4", system: "SYS", user: "USER")))
+        #expect(call.prompt == (try formatPrompt(template: "qwen3.5_nonthinking", system: "SYS", user: "USER")))
         #expect(call.maxTokens == 4096)
         #expect(call.sampling == tinyLlama.sampling.sanitized)
 
-        await #expect(throws: BuiltInError.notDownloaded("gemma4:e2b")) {
-            try await BuiltInModels(directory: scratch()).generate(model: "gemma4:e2b", system: "", user: "")
+        await #expect(throws: BuiltInError.notDownloaded("qwen3.5:4b")) {
+            try await BuiltInModels(directory: scratch()).generate(model: "qwen3.5:4b", system: "", user: "")
         }
         await #expect(throws: BuiltInError.unknownModel("nope")) { try await models.generate(model: "nope", system: "", user: "") }
     }
@@ -190,7 +157,7 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_LLAMA"] == "1"))
     func `the real built-in model summarizes on Metal`() async throws {
-        let name = ProcessInfo.processInfo.environment["MEETY_LLAMA_MODEL"] ?? "qwen3.5:2b"
+        let name = ProcessInfo.processInfo.environment["MEETY_LLAMA_MODEL"] ?? "qwen3.5:4b"
         let model = try #require(BuiltInModel.named(name))
         let models = BuiltInModels(directory: Paths.summaryModels)
         if await models.status(model) != .available { try await models.download(model) }
@@ -200,31 +167,6 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         print("[\(name)] \(ContinuousClock.now - clock): \(text)")
         #expect(text.localizedCaseInsensitiveContains("friday") || text.localizedCaseInsensitiveContains("beta"))
         #expect(!text.contains(transcript)) // a summary, not an echo
-        #expect(!text.contains("<|im_end|>") && !text.contains("<turn|>") && !text.contains("<think>"))
-    }
-}
-
-/// Port of the `commands.rs` recommendation tests.
-@Suite struct RecommendedModelTests {
-    // Floors from the Nov 2026 bake-off: Gemma 4 E2B beat Qwen 3.5 2B on accuracy; 9B was best overall on 24 GB.
-    @Test func `below 14 GB it recommends Gemma 4 E2B`() {
-        #expect(BuiltInModel.recommended(ramGB: 8).name == "gemma4:e2b")
-        #expect(BuiltInModel.recommended(ramGB: 13).name == "gemma4:e2b")
-    }
-
-    @Test func `from 14 GB it recommends Qwen 3.5 4B, from 24 GB Qwen 3.5 9B`() {
-        #expect(BuiltInModel.recommended(ramGB: 14).name == "qwen3.5:4b")
-        #expect(BuiltInModel.recommended(ramGB: 23).name == "qwen3.5:4b")
-        #expect(BuiltInModel.recommended(ramGB: 24).name == "qwen3.5:9b")
-        #expect(BuiltInModel.recommended(ramGB: 64).name == "qwen3.5:9b")
-    }
-
-    @Test func `the best downloaded model follows the bake-off ranking`() {
-        #expect(BuiltInModel.best(of: ["qwen3.5:2b", "gemma4:e2b"])?.name == "gemma4:e2b")
-        #expect(BuiltInModel.best(of: ["gemma4:e2b", "qwen3.5:4b", "qwen3.5:2b"])?.name == "qwen3.5:4b")
-        #expect(BuiltInModel.best(of: ["gemma4:e4b", "qwen3.5:4b"])?.name == "gemma4:e4b")
-        #expect(BuiltInModel.best(of: ["qwen3.5:9b", "gemma4:e4b"])?.name == "qwen3.5:9b")
-        #expect(BuiltInModel.best(of: ["lfm3:1.7b", "gemma3:1b"]) == nil) // retired names no longer match
-        #expect(BuiltInModel.best(of: ["unknown"]) == nil)
+        #expect(!text.contains("<|im_end|>") && !text.contains("<think>"))
     }
 }

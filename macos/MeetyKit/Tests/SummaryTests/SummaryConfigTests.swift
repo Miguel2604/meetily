@@ -60,7 +60,7 @@ import Testing
 
     @Test(arguments: [
         (SummaryConfig(provider: .openai, model: ""), "Choose a model."),
-        (SummaryConfig(provider: .builtin, model: "Qwen 3.5 2B"), "Choose a built-in model from the list, for example qwen3.5:2b."),
+        (SummaryConfig(provider: .builtin, model: "Qwen 3.5 2B"), "Choose a built-in model from the list, for example qwen3.5:4b."),
         (SummaryConfig(provider: .openai, model: "gpt-6-astra"), "Enter an API key for this provider."),
         (SummaryConfig(provider: .ollama, model: "m", ollamaEndpoint: "localhost:11434"), "Invalid Ollama endpoint URL. Must start with http:// or https://"),
         (SummaryConfig(provider: .customOpenAI, model: "m"), "Enter the endpoint URL. It must start with http:// or https://"),
@@ -75,7 +75,7 @@ import Testing
     }
 
     @Test func `built-in and ChatGPT need no key`() throws {
-        try SummaryConfig(provider: .builtin, model: "gemma4:e2b").validate()
+        try SummaryConfig(provider: .builtin, model: "qwen3.5:4b").validate()
         try SummaryConfig(provider: .chatgpt, model: "gpt-6-astra").validate()
     }
 }

@@ -36,7 +36,7 @@ final class OnboardingViewController: NSViewController {
 
     /// The transcription model onboarding sets up (the Tauri default), and the summary model for this Mac.
     private let transcription = ModelLibrary.Item.parakeet(.default)
-    private lazy var summary = ModelLibrary.Item.builtIn(BuiltInModel.recommended())
+    private lazy var summary = ModelLibrary.Item.builtIn(BuiltInModel.catalog[0])
 
     init(model: AppModel, onFinish: @escaping () -> Void) {
         self.model = model
@@ -226,13 +226,6 @@ final class OnboardingViewController: NSViewController {
         next.title = "Finish"
         Task {
             await library.refresh()
-            // A built-in model already on disk beats downloading the recommendation.
-            let downloaded = await model.builtIn.models().filter { $0.status == .available }.map(\.model.name)
-            if let best = BuiltInModel.best(of: downloaded), ModelLibrary.Item.builtIn(best) != summary {
-                summary = .builtIn(best)
-                if step == .models { show(.models) }
-                return
-            }
             for item in [transcription, summary] { Task { await prepare(item) } }
         }
     }

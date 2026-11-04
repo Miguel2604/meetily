@@ -18,10 +18,6 @@ public struct Sampling: Sendable, Hashable {
         Sampling(temperature: 0.5, topK: 20, topP: 0.8, presencePenalty: 0.3, frequencyPenalty: 0, repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: stop)
     }
 
-    public static func gemmaInstruct(stop: [String]) -> Sampling {
-        Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0, repeatPenalty: 1, penaltyLastN: 0, stopTokens: stop)
-    }
-
     /// Non-finite or out-of-range values fall back to neutral ones; a zero top-k stays (it disables top-k).
     var sanitized: Sampling {
         func finite(_ value: Float, _ fallback: Float) -> Float { value.isFinite ? value : fallback }
@@ -51,41 +47,15 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
 
     public var id: String { name }
 
+    /// One model: in the Nov 2026 bake-off Qwen 3.5 4B scored within noise of the 9B and Gemma 4 E4B at half their memory.
     public static let catalog = [
-        BuiltInModel(name: "qwen3.5:2b", displayName: "Qwen 3.5 2B (Fast)", file: "Qwen3.5-2B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
-                     url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf")!,
-                     sizeMB: 1221, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
-                     description: "The smallest and fastest built-in model. Quick summaries; can miss who owns what. Requires ~2GB RAM."),
-        BuiltInModel(name: "qwen3.5:4b", displayName: "Qwen 3.5 4B (High Quality)", file: "Qwen3.5-4B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
+        BuiltInModel(name: "qwen3.5:4b", displayName: "Qwen 3.5 4B", file: "Qwen3.5-4B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
                      url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")!,
                      sizeMB: 2614, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
-                     description: "High-quality summaries at a good speed. Recommended for Macs with 16GB. Requires ~4GB RAM."),
-        BuiltInModel(name: "qwen3.5:9b", displayName: "Qwen 3.5 9B (Best Quality)", file: "Qwen3.5-9B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
-                     url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf")!,
-                     sizeMB: 5417, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
-                     description: "The largest built-in model, for Macs with 24GB or more. Slower, most careful summaries."),
-        BuiltInModel(name: "gemma4:e2b", displayName: "Gemma 4 E2B (Balanced)", file: "gemma-4-E2B-it-Q4_K_M.gguf", template: "gemma4",
-                     url: URL(string: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf")!,
-                     sizeMB: 2963, contextSize: 32768, sampling: .gemmaInstruct(stop: ["<turn|>"]),
-                     description: "Google's Gemma 4 with 2B effective parameters. Good multilingual summaries. Requires ~4GB RAM."),
-        BuiltInModel(name: "gemma4:e4b", displayName: "Gemma 4 E4B (High Quality)", file: "gemma-4-E4B-it-Q4_K_M.gguf", template: "gemma4",
-                     url: URL(string: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")!,
-                     sizeMB: 4747, contextSize: 32768, sampling: .gemmaInstruct(stop: ["<turn|>"]),
-                     description: "Gemma 4 with 4B effective parameters. Most accurate in testing. Requires ~7GB RAM."),
+                     description: "Private, on-device summaries. Uses ~4GB of memory while summarizing."),
     ]
 
     public static func named(_ name: String) -> BuiltInModel? { catalog.first { $0.name == name } }
-
-    /// The onboarding pick for this Mac, from the Nov 2026 bake-off: Qwen 3.5 9B from 24 GB, 4B from 14 GB, else Gemma 4 E2B.
-    public static func recommended(ramGB: UInt64 = ProcessInfo.processInfo.physicalMemory >> 30) -> BuiltInModel {
-        named(ramGB >= 24 ? "qwen3.5:9b" : ramGB >= 14 ? "qwen3.5:4b" : "gemma4:e2b")!
-    }
-
-    /// The best of the downloaded models (`summary_model_priority`), in bake-off order, worst first.
-    public static func best(of names: [String]) -> BuiltInModel? {
-        let priority = ["qwen3.5:2b", "gemma4:e2b", "qwen3.5:4b", "gemma4:e4b", "qwen3.5:9b"]
-        return names.filter(priority.contains).max { priority.firstIndex(of: $0)! < priority.firstIndex(of: $1)! }.flatMap(named)
-    }
 }
 
 public enum BuiltInError: Error, Equatable, CustomStringConvertible, LocalizedError {
@@ -112,14 +82,9 @@ public enum BuiltInError: Error, Equatable, CustomStringConvertible, LocalizedEr
 
 /// Fills the model's chat template; control markers in the user text are defused so it cannot close its own turn.
 func formatPrompt(template: String, system: String, user: String) throws(BuiltInError) -> String {
-    let markers = ["<|im_start|>": "< |im_start| >", "<|im_end|>": "< |im_end| >", "<|turn>": "< |turn >", "<turn|>": "< turn| >",
-                   "<|think|>": "< |think| >", "<|channel>": "< |channel >", "<channel|>": "< channel| >",
-                   "<think>": "< think >", "</think>": "< /think >"]
+    let markers = ["<|im_start|>": "< |im_start| >", "<|im_end|>": "< |im_end| >", "<think>": "< think >", "</think>": "< /think >"]
     let escaped = markers.reduce(user) { $0.replacing($1.key, with: $1.value) }
     switch template {
-    case "gemma4":
-        // No <|think|> in the system turn keeps thinking off; E2B/E4B then answer without an empty thought block.
-        return "<|turn>system\n\(system)<turn|>\n<|turn>user\n\(escaped)<turn|>\n<|turn>model\n"
     case "qwen3.5_nonthinking":
         // An empty think block starts the answer in direct-response mode.
         return "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(escaped)<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
