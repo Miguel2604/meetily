@@ -104,3 +104,69 @@ public enum MarkdownSpans {
         return spans
     }
 }
+
+/// Markdown parsed into the blocks the read view renders (headings, paragraphs, list items, GFM tables, rules).
+/// Inline text keeps Foundation's `inlinePresentationIntent` (bold, italic, code) and `link`.
+public enum MarkdownBlocks {
+    public enum Block: Equatable, Sendable {
+        case heading(Int, AttributedString)
+        case paragraph(AttributedString, quote: Bool)
+        case listItem(depth: Int, marker: String, AttributedString)
+        /// Rows of cells; the first row is the header.
+        case table([[AttributedString]])
+        case rule
+    }
+
+    public static func parse(_ markdown: String) -> [Block] {
+        let options = AttributedString.MarkdownParsingOptions(allowsExtendedAttributes: true, interpretedSyntax: .full,
+                                                              failurePolicy: .returnPartiallyParsedIfPossible)
+        guard let doc = try? AttributedString(markdown: markdown, options: options) else { return [.paragraph(AttributedString(markdown), quote: false)] }
+        var blocks: [Block] = []
+        var lastID: Int?
+        for run in doc.runs {
+            var text = AttributedString(doc[run.range])
+            text.presentationIntent = nil
+            let parts = run.presentationIntent?.components ?? []
+            if let table = parts.first(where: { if case .table = $0.kind { true } else { false } }) {
+                var row = 0, column = 0
+                for part in parts {
+                    if case .tableRow(let index) = part.kind { row = index }
+                    if case .tableCell(let index) = part.kind { column = index }
+                }
+                var rows: [[AttributedString]] = []
+                if lastID == table.identity, case .table(let existing) = blocks.last { rows = existing; blocks.removeLast() }
+                while rows.count <= row { rows.append([]) }
+                while rows[row].count <= column { rows[row].append(AttributedString()) }
+                rows[row][column] += text
+                blocks.append(.table(rows))
+                lastID = table.identity
+                continue
+            }
+            guard let block = parts.first else { continue }
+            if lastID == block.identity, let last = blocks.popLast() {
+                switch last {
+                case .heading(let level, let old): blocks.append(.heading(level, old + text))
+                case .paragraph(let old, let quote): blocks.append(.paragraph(old + text, quote: quote))
+                case .listItem(let depth, let marker, let old): blocks.append(.listItem(depth: depth, marker: marker, old + text))
+                default: blocks.append(last)
+                }
+                continue
+            }
+            lastID = block.identity
+            if case .header(let level) = block.kind {
+                blocks.append(.heading(level, text))
+            } else if case .thematicBreak = block.kind {
+                blocks.append(.rule)
+            } else if let item = parts.firstIndex(where: { if case .listItem = $0.kind { true } else { false } }) {
+                // shortcut: a list item's second paragraph gets its own marker; LLM summaries don't write those.
+                let depth = parts.count { if case .listItem = $0.kind { true } else { false } }
+                guard case .listItem(let ordinal) = parts[item].kind else { continue }
+                let ordered = parts.indices.contains(item + 1) && parts[item + 1].kind == .orderedList
+                blocks.append(.listItem(depth: depth, marker: ordered ? "\(ordinal)." : "•", text))
+            } else {
+                blocks.append(.paragraph(text, quote: parts.contains { $0.kind == .blockQuote }))
+            }
+        }
+        return blocks
+    }
+}

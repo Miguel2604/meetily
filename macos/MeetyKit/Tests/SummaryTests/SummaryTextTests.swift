@@ -53,3 +53,26 @@ import Testing
         #expect(strings { $0.kind == .marker } == ["#", "**", "**", "-", "1.", "##"])
     }
 }
+
+@Suite struct MarkdownBlocksTests {
+    func plain(_ blocks: [MarkdownBlocks.Block]) -> [String] {
+        blocks.map {
+            switch $0 {
+            case .heading(let level, let text): "h\(level) \(String(text.characters))"
+            case .paragraph(let text, let quote): (quote ? "> " : "") + String(text.characters)
+            case .listItem(let depth, let marker, let text): "\(depth)\(marker) \(String(text.characters))"
+            case .table(let rows): rows.map { $0.map { String($0.characters) }.joined(separator: "|") }.joined(separator: "/")
+            case .rule: "---"
+            }
+        }
+    }
+
+    @Test func `parses summaries into rendered blocks, tables included`() {
+        let md = "**Action Items**\n\n| **Owner** | Task |\n| --- | --- |\n| Kate | Study *WCAG* |\n| Miguel | Send |\n\n## Highlights\n- one **b**\n  - nested\n1. first\n2. second\n\n> quote\n\n---\ntext"
+        let blocks = MarkdownBlocks.parse(md)
+        #expect(plain(blocks) == ["Action Items", "Owner|Task/Kate|Study WCAG/Miguel|Send", "h2 Highlights", "1• one b", "2• nested",
+                                  "11. first", "12. second", "> quote", "---", "text"])
+        guard case .paragraph(let title, _) = blocks[0] else { Issue.record("no title"); return }
+        #expect(title.runs.first?.inlinePresentationIntent == .stronglyEmphasized)
+    }
+}
