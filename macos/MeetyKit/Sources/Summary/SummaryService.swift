@@ -345,6 +345,8 @@ public actor SummaryService {
     private func generate(meetingID: String, text: String, providerID: String, model: String, customPrompt: String,
                           templateID: String, language: String?) async throws(LLMError) -> (GeneratedSummary, CacheSource) {
         guard let provider = Provider(id: providerID) else { throw .message("Unsupported LLM provider: \(providerID)") }
+        // A saved built-in model that left the catalog (gemma3:1b, qwen3.5:2b, …) runs on the current one instead of failing.
+        let model = provider == .builtin && !builtIn.catalog.contains { $0.name == model } ? builtIn.catalog.first?.name ?? model : model
         var key = ""
         if [.openai, .claude, .groq, .openrouter].contains(provider) {
             guard let stored = apiKey(provider.rawValue), !stored.isEmpty else { throw .message("API key not found for \(providerID)") }

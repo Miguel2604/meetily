@@ -279,7 +279,8 @@ func systems(_ stub: Stub) -> [String] {
         #expect(process.chunkCount ?? 0 >= 3)
     }
 
-    @Test func `built-in AI generates through the local model`() async throws {
+    @Test(arguments: ["tiny:1b", "gemma3:1b"]) // a retired saved model falls back to the catalog's
+    func `built-in AI generates through the local model`(model: String) async throws {
         let dir = scratch()
         try (Data("GGUF".utf8) + Data(count: 1_048_572)).write(to: dir.appending(path: tinyLlama.file))
         final class Canned: LlamaRunner {
@@ -287,7 +288,7 @@ func systems(_ stub: Stub) -> [String] {
         }
         let builtIn = BuiltInModels(directory: dir, catalog: [tinyLlama], load: { _, _ in Canned() })
         await (try await service(fakeLLM(), builtIn: builtIn).start(meetingID: meetingID, text: english, provider: "builtin-ai",
-                                                                    model: "tiny:1b", summaryLanguage: "en")).task.value
+                                                                    model: model, summaryLanguage: "en")).task.value
         let process = try #require(try await store.summaryProcess(meetingID: meetingID))
         #expect(process.status == "completed")
         #expect(try object(try #require(process.result))["markdown"] as? String == "## Notes\nDone")
