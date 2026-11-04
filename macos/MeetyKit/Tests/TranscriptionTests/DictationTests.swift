@@ -73,6 +73,24 @@ import Testing
         #expect(delivered.texts.isEmpty)
     }
 
+    @Test func `cancelling while it transcribes or cleans delivers nothing, and a new dictation can start`() async throws {
+        final class Box { var dictation: Dictation? }
+        let delivered = Delivered(), box = Box()
+        let mic = SampleSource(samples: tone(1, rate: 48_000))
+        let d = Dictation(capture: { mic }, engine: { FakeEngine() }, clean: { raw in
+            box.dictation?.cancel()
+            return raw
+        }, deliver: { delivered.texts.append($0) })
+        box.dictation = d
+        d.tail = .zero
+        try d.start()
+        #expect(try await d.finish() == nil)
+        #expect(delivered.texts.isEmpty)
+        #expect(d.phase == .idle)
+        try d.start()
+        #expect(d.phase == .listening)
+    }
+
     @Test func `silence delivers nothing`() async throws {
         final class Mute: TranscriptionEngine { func transcribe(samples: [Float]) async throws -> [Segment] { [] } }
         let delivered = Delivered()

@@ -54,6 +54,8 @@ public final class Dictation {
     @ObservationIgnored private var collected: [Float] = []
     @ObservationIgnored private var pump: Task<Void, Never>?
     @ObservationIgnored private var loading: Task<any TranscriptionEngine, any Error>?
+    /// Bumped by `cancel`, so a finish already transcribing or cleaning drops its result.
+    @ObservationIgnored private var generation = 0
 
     /// `capture` starts a 48 kHz microphone; `engine` hands out the prepared model; `clean` never fails (it falls
     /// back to its input); `deliver` puts the text where the user is typing.
@@ -84,8 +86,10 @@ public final class Dictation {
         }
     }
 
+    /// Stops listening, or drops a dictation still transcribing or cleaning so it is never pasted.
     public func cancel() {
-        guard phase == .listening else { return }
+        guard phase != .idle else { return }
+        generation += 1
         stopCapture()
         loading?.cancel()
         loading = nil
@@ -96,16 +100,24 @@ public final class Dictation {
     /// or it wasn't listening.
     @discardableResult public func finish() async throws -> String? {
         guard phase == .listening, let loading else { return nil }
+        let id = generation
         phase = .transcribing
-        defer { phase = .idle; self.loading = nil }
+        defer { if id == generation { phase = .idle; self.loading = nil } }
         try? await Task.sleep(for: tail)
+        guard id == generation else { return nil }
         let samples = stopCapture()
         let audio = try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate).process(samples)
-        let text = try await loading.value.transcribe(samples: audio).map(\.text).joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
+        let text: String
+        do {
+            text = try await loading.value.transcribe(samples: audio).map(\.text).joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch where id != generation {
+            return nil // cancelled while the engine loaded
+        }
+        guard id == generation, !text.isEmpty else { return nil }
         phase = .cleaning
         let cleaned = await clean(text)
+        guard id == generation else { return nil }
         deliver(cleaned)
         return cleaned
     }
