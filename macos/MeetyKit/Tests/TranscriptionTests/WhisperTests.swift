@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Transcription
 
-struct FakeRunner: WhisperRunner {
+final class FakeRunner: WhisperRunner {
     func run(_ samples: [Float], language: String?) async throws -> String { "\(language ?? "auto"):\(samples.count)" }
 }
 
@@ -77,6 +77,33 @@ func fakeRemote() throws -> URL {
         #expect(try await tagalog.transcribe(samples: []).isEmpty)
         let auto = try await models.engine(tinyModel, language: nil)
         #expect(try await auto.transcribe(samples: [Float](repeating: 0.1, count: 32_000)).map(\.text) == ["auto:32000"])
+    }
+
+    @Test func `the model stays loaded between uses, then unloads once idle`() async throws {
+        let loads = Progress()
+        let models = WhisperModels(directory: dir, catalog: [tinyModel], baseURL: try fakeRemote(), idleTimeout: .milliseconds(100),
+                                   load: { _ in loads.add(1); return FakeRunner() })
+        try await models.download(tinyModel)
+        weak var first = try await models.engine(tinyModel, language: nil).runner as? FakeRunner
+        _ = try await models.engine(tinyModel, language: nil)
+        #expect(loads.values.count == 2) // the download's warm-up, then one load for both engines
+        #expect(first != nil)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(first == nil)
+        _ = try await models.engine(tinyModel, language: nil)
+        #expect(loads.values.count == 3)
+    }
+
+    @Test func `an engine in use past the idle timeout is shared, not loaded twice`() async throws {
+        let loads = Progress()
+        let models = WhisperModels(directory: dir, catalog: [tinyModel], baseURL: try fakeRemote(), idleTimeout: .milliseconds(50),
+                                   load: { _ in loads.add(1); return FakeRunner() })
+        try await models.download(tinyModel)
+        let recording = try await models.engine(tinyModel, language: "tl")
+        try await Task.sleep(for: .milliseconds(200))
+        let dictation = try await models.engine(tinyModel, language: nil)
+        #expect(dictation.runner === recording.runner)
+        #expect(loads.values.count == 2)
     }
 
     @Test func `loading a missing model fails`() async {

@@ -41,7 +41,7 @@ public enum WhisperError: Error, Equatable, CustomStringConvertible {
 }
 
 /// One loaded whisper.cpp model; runs are serialized.
-protocol WhisperRunner: Sendable {
+protocol WhisperRunner: AnyObject, Sendable {
     func run(_ samples: [Float], language: String?) async throws -> String
 }
 
@@ -120,7 +120,8 @@ public final class WhisperEngine: TranscriptionEngine {
     }
 }
 
-/// Whisper catalog, download/cancel/delete, and the one loaded model.
+/// Whisper catalog, download/cancel/delete, and the one loaded model, which stays in memory between uses
+/// until `idleTimeout` passes with no new engine.
 public actor WhisperModels {
     public static let huggingFace = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main")!
 
@@ -128,21 +129,27 @@ public actor WhisperModels {
     public let catalog: [WhisperModel]
     let baseURL: URL
     let load: @Sendable (URL) throws -> any WhisperRunner
+    let idleTimeout: Duration
     private var downloads: [String: (task: Task<Void, any Error>, progress: Double)] = [:]
-    private var current: (model: WhisperModel, runner: any WhisperRunner)?
+    private var loadedModel: WhisperModel?
+    /// Set while any engine still holds the runner, so a recording and a dictation share one copy.
+    private weak var runner: (any WhisperRunner)?
+    /// Keeps `runner` loaded between uses; dropped after `idleTimeout`.
+    private var warm: (any WhisperRunner)?
+    private var idle: Task<Void, Never>?
 
     public init(directory: URL) {
         self.init(directory: directory, catalog: WhisperModel.catalog, load: { try WhisperContext(model: $0) })
     }
 
-    init(directory: URL, catalog: [WhisperModel], baseURL: URL = huggingFace, load: @escaping @Sendable (URL) throws -> any WhisperRunner) {
+    init(directory: URL, catalog: [WhisperModel], baseURL: URL = huggingFace, idleTimeout: Duration = .seconds(300),
+         load: @escaping @Sendable (URL) throws -> any WhisperRunner) {
         self.directory = directory
         self.catalog = catalog
         self.baseURL = baseURL
+        self.idleTimeout = idleTimeout
         self.load = load
     }
-
-    public var loaded: WhisperModel? { current?.model }
 
     private func file(_ model: WhisperModel) -> URL { directory.appending(path: model.file) }
     private func encoder(_ model: WhisperModel) -> URL { directory.appending(path: model.encoderFolder, directoryHint: .isDirectory) }
@@ -204,7 +211,7 @@ public actor WhisperModels {
 
     public func delete(_ model: WhisperModel) throws {
         guard downloads[model.name] == nil else { throw WhisperError.busy(model.name) }
-        if current?.model == model { current = nil }
+        if loadedModel == model { unload() }
         for url in [file(model), encoder(model)] where FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
@@ -212,16 +219,33 @@ public actor WhisperModels {
 
     /// A prepared engine for `model` in `language` (nil = detect), loading the model if needed.
     public func engine(_ model: WhisperModel, language: String?) async throws -> WhisperEngine {
-        if let current, current.model == model { return WhisperEngine(model: model, language: language, runner: current.runner) }
+        if loadedModel == model, let runner {
+            keepWarm(runner)
+            return WhisperEngine(model: model, language: language, runner: runner)
+        }
         guard downloads[model.name] == nil else { throw WhisperError.busy(model.name) }
         guard status(model) == .available else { throw WhisperError.notDownloaded(model.name) }
-        current = nil
+        unload()
         let runner = try load(file(model))
-        current = (model, runner)
+        (loadedModel, self.runner) = (model, runner)
+        keepWarm(runner)
         return WhisperEngine(model: model, language: language, runner: runner)
     }
 
-    public func unload() { current = nil }
+    private func keepWarm(_ runner: any WhisperRunner) {
+        warm = runner
+        idle?.cancel()
+        idle = Task { [idleTimeout] in
+            try? await Task.sleep(for: idleTimeout)
+            if !Task.isCancelled { warm = nil } // engines still in use keep it alive until they finish
+        }
+    }
+
+    /// Frees the model once no engine holds it.
+    public func unload() {
+        idle?.cancel()
+        warm = nil
+    }
 }
 
 /// Unzips with macOS's `ditto` into a scratch folder, then swaps it into place.
