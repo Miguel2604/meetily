@@ -2,13 +2,21 @@ import AppKit
 import Transcription
 import UniformTypeIdentifiers
 
-/// The main window: sidebar of meetings and a content area routed by `AppModel.route`, under a glass toolbar
-/// with the window title, Record (Stop while recording) and transcript search.
-final class MainWindowController: NSWindowController, NSMenuItemValidation, NSToolbarDelegate {
+/// The main window: sidebar of meetings and a content area routed by `AppModel.route`, under a glass toolbar:
+/// the title, the open meeting's Summary/Notes, Generate, Share, More and transcript items, Record (Stop while
+/// recording) and transcript search.
+final class MainWindowController: NSWindowController, NSMenuItemValidation, NSToolbarDelegate, NSSharingServicePickerToolbarItemDelegate {
     private let model: AppModel
     private let sidebar: SidebarViewController
     private let router: ContentRouter
     private let recordItem = NSToolbarItem(itemIdentifier: .record)
+    private let modeItem = NSToolbarItemGroup(itemIdentifier: .mode, titles: ["Summary", "Notes"], selectionMode: .selectOne,
+                                              labels: ["Summary", "Notes"], target: nil, action: #selector(modeChosen(_:)))
+    private let generateItem = NSToolbarItem(itemIdentifier: .generate)
+    private let shareItem = NSSharingServicePickerToolbarItem(itemIdentifier: .share)
+    private let moreItem = NSMenuToolbarItem(itemIdentifier: .more)
+    private let transcriptItem = NSToolbarItem(itemIdentifier: .transcript)
+    private var meeting: MeetingViewController? { router.children.first as? MeetingViewController }
     private var clock: Timer?
 
     init(model: AppModel) {
@@ -39,10 +47,13 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
         let toolbar = NSToolbar(identifier: "Main")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
+        toolbar.centeredItemIdentifiers = [.mode]
         window.toolbar = toolbar
         recordItem.style = .prominent
         recordItem.autovalidates = false
         recordItem.target = self
+        buildMeetingItems()
+        router.onShow = { [weak self] in self?.renderMeetingItems() }
         track { [weak self] in self?.renderRecord() }
         track { [weak self] in self?.renderTitle() }
     }
@@ -50,7 +61,7 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
     // MARK: Toolbar
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .record, .search]
+        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .mode, .flexibleSpace, .generate, .share, .more, .transcript, .record, .search]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -58,6 +69,11 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
         case .record: return recordItem
+        case .mode: return modeItem
+        case .generate: return generateItem
+        case .share: return shareItem
+        case .more: return moreItem
+        case .transcript: return transcriptItem
         case .search:
             let item = NSSearchToolbarItem(itemIdentifier: id)
             item.searchField = sidebar.search
@@ -66,6 +82,59 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
         default: return nil
         }
     }
+
+    private func buildMeetingItems() {
+        modeItem.target = self
+        modeItem.selectedIndex = 0
+        generateItem.target = self
+        generateItem.action = #selector(generateChosen(_:))
+        generateItem.autovalidates = false
+        shareItem.delegate = self
+        shareItem.label = "Share"
+        moreItem.label = "More"
+        moreItem.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "More")
+        moreItem.showsIndicator = false
+        transcriptItem.label = "Transcript"
+        transcriptItem.toolTip = "Show or hide the transcript"
+        transcriptItem.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Transcript")
+        transcriptItem.target = self
+        transcriptItem.action = #selector(toggleTranscript(_:))
+        renderMeetingItems()
+    }
+
+    /// Meeting items show only on a meeting, follow its generating state, and act on it.
+    private func renderMeetingItems() {
+        let meeting = meeting
+        for item in [modeItem, generateItem, shareItem, moreItem, transcriptItem] { item.isHidden = meeting == nil }
+        guard let meeting else { return }
+        modeItem.selectedIndex = meeting.mode == .notes ? 1 : 0
+        let menu = NSMenu()
+        for (title, action) in [("Copy Summary", #selector(MeetingViewController.copySummary)), ("Copy Transcript", #selector(MeetingViewController.copyTranscript)),
+                                ("Export Summary…", #selector(MeetingViewController.exportSummary)), ("", nil),
+                                ("Show Recording in Finder", #selector(MeetingViewController.openFolder)), ("Enhance Transcript…", #selector(MeetingViewController.retranscribe))] as [(String, Selector?)] {
+            guard let action else { menu.addItem(.separator()); continue }
+            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = meeting
+        }
+        moreItem.menu = menu
+        track { [weak self, weak meeting] in
+            guard let self, let meeting else { return }
+            let generating = meeting.summary.isGenerating
+            generateItem.label = generating ? "Stop" : "Generate"
+            generateItem.toolTip = generating ? "Stop writing the summary" : "Generate a summary"
+            generateItem.image = NSImage(systemSymbolName: generating ? "stop.circle" : "sparkles", accessibilityDescription: generateItem.label)
+        }
+    }
+
+    @objc private func modeChosen(_ sender: NSToolbarItemGroup) { meeting?.mode = sender.selectedIndex == 1 ? .notes : .summary }
+
+    @objc private func generateChosen(_ sender: NSToolbarItem) {
+        guard let meeting else { return }
+        meeting.summary.isGenerating ? meeting.stopGeneration() : meeting.showOptions(relativeTo: sender)
+    }
+
+    @objc private func toggleTranscript(_ sender: Any?) { meeting?.toggleTranscript() }
+
+    func items(for pickerToolbarItem: NSSharingServicePickerToolbarItem) -> [Any] { meeting?.shareText.map { [$0] } ?? [] }
 
     /// Record, or Stop with the elapsed time while recording; disabled while starting or stopping.
     private func renderRecord() {
@@ -95,9 +164,12 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
         guard let window else { return }
         switch model.route {
         case .home:
+            window.titleVisibility = .visible
             window.title = "Meety"
             window.subtitle = model.meetings.count == 1 ? "1 meeting" : "\(model.meetings.count) meetings"
         case .meeting(let id):
+            // The document shows the title; the toolbar keeps the Summary/Notes control alone.
+            window.titleVisibility = .hidden
             let meeting = model.meetings.first { $0.id == id }
             window.title = meeting?.title ?? "Meeting"
             window.subtitle = meeting?.createdDate?.formatted(date: .long, time: .shortened) ?? ""
@@ -217,12 +289,19 @@ extension MainWindowController: NSWindowDelegate {
 private extension NSToolbarItem.Identifier {
     static let record = Self("record")
     static let search = Self("search")
+    static let mode = Self("mode")
+    static let generate = Self("generate")
+    static let share = Self("share")
+    static let more = Self("more")
+    static let transcript = Self("transcript")
 }
 
 /// Swaps the content pane for the current route.
 final class ContentRouter: NSViewController {
     private let model: AppModel
     private var shown: AppModel.Route?
+    /// Called after the content changes, so the toolbar can follow the new screen.
+    var onShow: (() -> Void)?
     private lazy var home = HomeViewController(model: model)
 
     init(model: AppModel) {
@@ -263,6 +342,7 @@ final class ContentRouter: NSViewController {
         child.view.frame = view.bounds
         child.view.autoresizingMask = [.width, .height]
         view.addSubview(child.view)
+        onShow?()
     }
 }
 

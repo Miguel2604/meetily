@@ -4,36 +4,27 @@ import Summary
 import Transcription
 import UniformTypeIdentifiers
 
-/// Meeting details (MeetingDetailsSplitView.tsx): transcript with audio playback on the left; summary and
-/// notes editors with generate, template, model and language pickers on the right.
-final class MeetingViewController: NSSplitViewController {
+/// Meeting details: the summary or notes document, with the recording playing from a floating glass capsule, and the
+/// transcript in a trailing inspector. The window toolbar drives it: Summary/Notes, Generate (template, model,
+/// language and context in a popover), Share, More and the transcript toggle (MainWindowController).
+final class MeetingViewController: NSSplitViewController, NSMenuItemValidation {
+    enum Mode { case summary, notes }
+
     private let model: AppModel
     private let meetingID: String
-    private let summary: SummaryController
+    let summary: SummaryController
     private var meeting: Meeting?
     private var transcripts: [Transcript] = []
+    var mode = Mode.summary { didSet { renderSummary() } }
 
-    // Transcript pane
+    // Transcript inspector
     private let transcriptList = TranscriptListView()
-    private let titleLabel = NSTextField.meety("", font: Typography.title)
-    private let dateLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
-    private let audioSlot = NSStackView()
-    private var audioBar: AudioBarView?
-    private lazy var copyTranscriptButton = small("Copy", "doc.on.doc", #selector(copyTranscript), tip: "Copy Transcript")
-    private lazy var folderButton = small("Recording", "folder", #selector(openFolder), tip: "Open Recording Folder")
-    private lazy var enhanceButton = small("Enhance", "wand.and.stars", #selector(retranscribe), tip: "Retranscribe to enhance your recorded audio")
 
-    // Summary pane
-    private let tabs = NSSegmentedControl(labels: ["Summary", "Notes"], trackingMode: .selectOne, target: nil, action: nil)
-    private lazy var generateButton = small("Generate Summary", "sparkles", #selector(generate), tip: "Generate AI Summary")
-    private lazy var stopButton = small("Stop", "stop.fill", #selector(stopGeneration), tip: "Stop summary generation")
-    private let templatePopup = NSPopUpButton()
-    private let modelPopup = NSPopUpButton()
-    private let languagePopup = NSPopUpButton()
-    private lazy var saveButton = small("Save", "square.and.arrow.down", #selector(saveSummary), tip: "Save edits")
-    private lazy var copySummaryButton = small("Copy", "doc.on.doc", #selector(copySummary), tip: "Copy Summary")
-    private lazy var exportButton = small("Export…", "square.and.arrow.up", #selector(exportSummary), tip: "Export the summary as Markdown")
-    private let customPrompt = NSTextField()
+    // Document
+    private let titleLabel = NSTextField.meety("", font: Typography.largeTitle)
+    private let dateLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
+    private let player = NSView()
+    private var audioBar: AudioBarView?
     private let summaryEditor = MarkdownEditor()
     private let notesEditor = MarkdownEditor()
     private let writing = NSStackView()
@@ -42,6 +33,14 @@ final class MeetingViewController: NSSplitViewController {
         symbol: "doc.questionmark", title: "No Summary Generated Yet",
         message: "Generate an AI-powered summary of your meeting transcript to get key points, action items, and decisions.",
         action: ("Generate Summary", "sparkles", self, #selector(generate)))
+
+    // Generate options (popover)
+    private let options = NSPopover()
+    private let templatePopup = NSPopUpButton()
+    private let modelPopup = NSPopUpButton()
+    private let languagePopup = NSPopUpButton()
+    private let customPrompt = NSTextField()
+
     private var notesSave: Task<Void, Never>?
     /// Set by typing only, so leaving before the notes load never writes the empty editor over them.
     private var notesEdited = false
@@ -59,13 +58,15 @@ final class MeetingViewController: NSSplitViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let left = NSSplitViewItem(viewController: Placeholder(transcriptPane()))
-        left.minimumThickness = 300
-        let right = NSSplitViewItem(viewController: Placeholder(summaryPane()))
-        right.minimumThickness = 360
-        addSplitViewItem(left)
-        addSplitViewItem(right)
+        let document = NSSplitViewItem(viewController: Placeholder(documentPane()))
+        document.minimumThickness = 360
+        let inspector = NSSplitViewItem(inspectorWithViewController: Placeholder(transcriptPane()))
+        inspector.minimumThickness = 280
+        inspector.maximumThickness = 520
+        addSplitViewItem(document)
+        addSplitViewItem(inspector)
         splitView.autosaveName = "MeetingSplit"
+        buildOptions()
         track { [weak self] in self?.renderSummary() }
         Task { await load() }
     }
@@ -78,71 +79,42 @@ final class MeetingViewController: NSSplitViewController {
 
     // MARK: Build
 
-    private func small(_ title: String, _ symbol: String, _ action: Selector, tip: String) -> NSButton {
-        let button = NSButton.meety(title, symbol: symbol, target: self, action: action)
-        button.controlSize = .regular
-        button.toolTip = tip
-        return button
+    private func transcriptPane() -> NSView {
+        let heading = NSTextField.meety("Transcript", font: Typography.headline)
+        transcriptList.onSelect = { [weak self] row in self?.audioBar?.seek(to: row.start) }
+        let stack = NSStackView(views: [heading, transcriptList])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 0, right: 8)
+        for v in [heading, transcriptList] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24).isActive = true }
+        transcriptList.setContentHuggingPriority(.defaultLow, for: .vertical)
+        return SafeAreaContainer(stack)
     }
 
-    private func transcriptPane() -> NSView {
+    private func documentPane() -> NSView {
         titleLabel.maximumNumberOfLines = 2
-        let actions = NSStackView(views: [copyTranscriptButton, folderButton, enhanceButton])
-        let header = NSStackView(views: [titleLabel, dateLabel, actions])
+        let header = NSStackView(views: [titleLabel, dateLabel])
         header.orientation = .vertical
         header.alignment = .leading
         header.spacing = 4
-        header.setCustomSpacing(12, after: dateLabel)
-        transcriptList.onSelect = { [weak self] row in self?.audioBar?.seek(to: row.start) }
-        audioSlot.orientation = .vertical
-        let stack = NSStackView(views: [header, transcriptList, audioSlot])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 12, right: 12)
-        for v in [header, transcriptList, audioSlot] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true }
-        transcriptList.setContentHuggingPriority(.defaultLow, for: .vertical)
-        let root = SafeAreaContainer(stack)
-        return root
-    }
+        header.edgeInsets = NSEdgeInsets(top: 0, left: 29, bottom: 0, right: 29) // the editor's text inset plus line padding
 
-    private func summaryPane() -> NSView {
-        tabs.selectedSegment = 0
-        tabs.target = self
-        tabs.action = #selector(switchTab)
-        templatePopup.target = self
-        templatePopup.action = #selector(templateChosen)
-        templatePopup.toolTip = "Select summary template"
-        modelPopup.target = self
-        modelPopup.action = #selector(modelChosen)
-        modelPopup.toolTip = "Summary model"
-        languagePopup.target = self
-        languagePopup.action = #selector(languageChosen)
-        languagePopup.setAccessibilityLabel("Set summary language")
-        for popup in [templatePopup, modelPopup, languagePopup] { popup.controlSize = .regular }
-        customPrompt.placeholderString = "Add context for AI summary. For example people involved, meeting overview, objective etc..."
-        customPrompt.lineBreakMode = .byTruncatingTail
-
-        let row1 = NSStackView(views: [tabs, NSView(), saveButton, copySummaryButton, exportButton])
-        let row2 = NSStackView(views: [generateButton, stopButton, templatePopup])
-        let row3 = NSStackView(views: [modelPopup, languagePopup])
-        row3.distribution = .fillEqually
-        // A narrow pane truncates the pickers and drops Export, then Copy, instead of widening the window past the screen.
-        for v in [templatePopup, modelPopup, languagePopup, customPrompt] as [NSView] { v.setContentCompressionResistancePriority(.defaultLow, for: .horizontal) }
-        row1.setVisibilityPriority(.detachOnlyIfNecessary, for: exportButton)
-        row1.setVisibilityPriority(NSStackView.VisibilityPriority(rawValue: 900), for: copySummaryButton)
         let spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.startAnimation(nil)
         writing.setViews([spinner, NSTextField.meety("Writing the summary…", font: Typography.callout, color: .secondaryLabelColor)], in: .center)
         writing.orientation = .vertical
-
         summaryEditor.onChange = { [weak self] text in self?.summary.markdown = text }
         notesEditor.onChange = { [weak self] _ in
             self?.notesEdited = true
             self?.scheduleNotesSave()
         }
-        notesEditor.isHidden = true
+        // Text clears the floating player.
+        for editor in [summaryEditor, notesEditor] {
+            editor.automaticallyAdjustsContentInsets = false
+            editor.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 72, right: 0)
+        }
         errorLabel.isHidden = true
 
         let body = NSView()
@@ -154,16 +126,67 @@ final class MeetingViewController: NSSplitViewController {
                 v.topAnchor.constraint(equalTo: body.topAnchor), v.bottomAnchor.constraint(equalTo: body.bottomAnchor),
             ])
         }
-        let stack = NSStackView(views: [row1, row2, row3, customPrompt, errorLabel, body])
+        let stack = NSStackView(views: [header, errorLabel, body])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 0, right: 16)
-        for v in [row1, row2, row3, customPrompt, errorLabel, body] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true }
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 0, bottom: 0, right: 0)
+        header.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        body.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         body.setContentHuggingPriority(.defaultLow, for: .vertical)
         let root = SafeAreaContainer(stack)
-        root.wantsLayer = true
+
+        player.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(player)
+        NSLayoutConstraint.activate([
+            player.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            player.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+            player.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
+            player.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40).withPriority(.defaultHigh),
+        ])
         return root
+    }
+
+    private func buildOptions() {
+        templatePopup.target = self
+        templatePopup.action = #selector(templateChosen)
+        modelPopup.target = self
+        modelPopup.action = #selector(modelChosen)
+        languagePopup.target = self
+        languagePopup.action = #selector(languageChosen)
+        templatePopup.setAccessibilityLabel("Template")
+        modelPopup.setAccessibilityLabel("Model")
+        languagePopup.setAccessibilityLabel("Summary language")
+        customPrompt.placeholderString = "People involved, meeting overview, objective…"
+        customPrompt.setAccessibilityLabel("Context for the summary")
+        customPrompt.lineBreakMode = .byWordWrapping
+        customPrompt.usesSingleLineMode = false
+        customPrompt.heightAnchor.constraint(equalToConstant: 56).isActive = true
+        func label(_ text: String) -> NSTextField {
+            let label = NSTextField(labelWithString: text)
+            label.alignment = .right
+            return label
+        }
+        let grid = NSGridView(views: [
+            [label("Template:"), templatePopup],
+            [label("Model:"), modelPopup],
+            [label("Language:"), languagePopup],
+            [label("Context:"), customPrompt],
+        ])
+        grid.rowSpacing = 10
+        grid.columnSpacing = 8
+        grid.rowAlignment = .firstBaseline
+        grid.column(at: 1).width = 260
+        let go = NSButton.meety("Generate Summary", symbol: "sparkles", role: .primary, target: self, action: #selector(generateFromOptions))
+        go.keyEquivalent = "\r"
+        let stack = NSStackView(views: [grid, go])
+        stack.orientation = .vertical
+        stack.alignment = .trailing
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        options.contentViewController = Placeholder(stack)
+        options.behavior = .transient
     }
 
     // MARK: Load
@@ -186,16 +209,22 @@ final class MeetingViewController: NSSplitViewController {
         titleLabel.stringValue = summary.title ?? meeting?.title ?? ""
         dateLabel.stringValue = meeting?.createdDate?.formatted(date: .long, time: .shortened) ?? ""
         transcriptList.set(transcripts.map { .init(start: $0.audioStartTime ?? 0, text: $0.transcript, source: Self.source($0.speaker)) })
-        copyTranscriptButton.isEnabled = !transcripts.isEmpty
-        let folder = meeting?.folderPath.map { URL(fileURLWithPath: $0, isDirectory: true) }
-        folderButton.isEnabled = folder != nil
-        enhanceButton.isEnabled = folder.flatMap(OfflineTranscription.findAudio(in:)) != nil
         audioBar?.stop()
-        audioSlot.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        audioBar = folder.flatMap(OfflineTranscription.findAudio(in:)).map(AudioBarView.init(url:))
-        if let audioBar { audioSlot.addArrangedSubview(audioBar) }
-        languagePopup.isEnabled = folder != nil
+        player.subviews.forEach { $0.removeFromSuperview() }
+        audioBar = audioURL.map(AudioBarView.init(url:))
+        if let audioBar {
+            let glass = NSGlassEffectView(wrapping: audioBar, inset: NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 8), cornerRadius: 22)
+            glass.translatesAutoresizingMaskIntoConstraints = false
+            player.addSubview(glass)
+            NSLayoutConstraint.activate([
+                glass.leadingAnchor.constraint(equalTo: player.leadingAnchor), glass.trailingAnchor.constraint(equalTo: player.trailingAnchor),
+                glass.topAnchor.constraint(equalTo: player.topAnchor), glass.bottomAnchor.constraint(equalTo: player.bottomAnchor),
+            ])
+        }
+        languagePopup.isEnabled = folderURL != nil
     }
+
+    private var audioURL: URL? { folderURL.flatMap(OfflineTranscription.findAudio(in:)) }
 
     private static func source(_ speaker: String?) -> String? {
         switch speaker {
@@ -238,7 +267,7 @@ final class MeetingViewController: NSSplitViewController {
 
     private func renderSummary() {
         let generating = summary.isGenerating
-        let notes = tabs.selectedSegment == 1
+        let notes = mode == .notes
         summaryEditor.markdown = summary.markdown
         summaryEditor.isHidden = notes || generating || !summary.hasSummary
         notesEditor.isHidden = !notes
@@ -251,16 +280,8 @@ final class MeetingViewController: NSSplitViewController {
             : "Generate an AI-powered summary of your meeting transcript to get key points, action items, and decisions."
         errorLabel.stringValue = summary.error ?? ""
         errorLabel.isHidden = notes || summary.error == nil
-        generateButton.title = summary.hasSummary ? "Regenerate Summary" : "Generate Summary"
-        generateButton.isHidden = generating
-        stopButton.isHidden = !generating
         for control in [templatePopup, modelPopup, languagePopup, customPrompt] as [NSControl] { control.isEnabled = !generating }
-        saveButton.isEnabled = summary.isDirty && !generating
-        copySummaryButton.isEnabled = summary.hasSummary && !generating
-        exportButton.isEnabled = summary.hasSummary && !generating
-        for v in [generateButton, stopButton, templatePopup, modelPopup, languagePopup, customPrompt] as [NSView] { v.superview?.isHidden = notes && v !== customPrompt }
-        customPrompt.isHidden = notes
-        for v in [saveButton, copySummaryButton, exportButton] { v.isHidden = notes }
+        if generating { options.performClose(nil) }
         if let title = summary.title, title != titleLabel.stringValue, meeting != nil {
             titleLabel.stringValue = title
             Task { await model.reloadMeetings() }
@@ -268,8 +289,6 @@ final class MeetingViewController: NSSplitViewController {
     }
 
     // MARK: Actions
-
-    @objc private func switchTab() { renderSummary() }
 
     @objc private func generate() {
         guard let choice = modelChoices.first.map({ _ in modelChoices[max(0, modelPopup.indexOfSelectedItem)] }) else {
@@ -285,7 +304,32 @@ final class MeetingViewController: NSSplitViewController {
         }
     }
 
-    @objc private func stopGeneration() { Task { await summary.cancel() } }
+    /// The Generate toolbar item: options and a Generate button, anchored to the item.
+    func showOptions(relativeTo item: NSToolbarItem) {
+        options.isShown ? options.performClose(nil) : options.show(relativeTo: item)
+    }
+
+    @objc private func generateFromOptions() {
+        options.performClose(nil)
+        generate()
+    }
+
+    func stopGeneration() { Task { await summary.cancel() } }
+
+    func toggleTranscript() { toggleInspector(nil) }
+
+    /// What Share sends: the summary, or the transcript when there is no summary yet.
+    var shareText: String? { summaryCopyText ?? transcriptCopyText }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(copyTranscript): !transcripts.isEmpty
+        case #selector(copySummary), #selector(exportSummary): summaryCopyText != nil && !summary.isGenerating
+        case #selector(openFolder): folderURL != nil
+        case #selector(retranscribe): audioURL != nil
+        default: true
+        }
+    }
 
     @objc private func templateChosen() {
         if templates.indices.contains(templatePopup.indexOfSelectedItem) { model.summaryTemplate = templates[templatePopup.indexOfSelectedItem].id }
@@ -310,30 +354,26 @@ final class MeetingViewController: NSSplitViewController {
         }
     }
 
-    @objc func saveSummary() {
-        Task {
-            do { try await summary.save() } catch { model.present(error) }
-        }
+    private var transcriptCopyText: String? {
+        guard let meeting, !transcripts.isEmpty else { return nil }
+        return SummaryText.transcriptCopy(meetingID: meeting.id, title: titleLabel.stringValue, date: meeting.createdDate ?? Date(), transcripts: transcripts)
     }
 
-    @objc private func copyTranscript() {
-        guard let meeting else { return }
-        copy(SummaryText.transcriptCopy(meetingID: meeting.id, title: titleLabel.stringValue, date: meeting.createdDate ?? Date(), transcripts: transcripts))
-    }
+    @objc func copyTranscript() { transcriptCopyText.map(copy) }
 
     private var summaryCopyText: String? {
         guard let meeting, summary.hasSummary else { return nil }
         return SummaryText.summaryCopy(meetingID: meeting.id, title: titleLabel.stringValue, date: meeting.createdDate ?? Date(), markdown: summary.markdown)
     }
 
-    @objc private func copySummary() { summaryCopyText.map(copy) }
+    @objc func copySummary() { summaryCopyText.map(copy) }
 
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    @objc private func exportSummary() {
+    @objc func exportSummary() {
         guard let text = summaryCopyText, let window = view.window else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
@@ -344,12 +384,12 @@ final class MeetingViewController: NSSplitViewController {
         }
     }
 
-    @objc private func openFolder() {
+    @objc func openFolder() {
         guard let folder = folderURL else { return }
         NSWorkspace.shared.open(folder)
     }
 
-    @objc private func retranscribe() {
+    @objc func retranscribe() {
         presentAsSheet(TranscribeSheet(model: model, job: .retranscribe(meetingID: meetingID)) { [weak self] _ in
             Task { [weak self] in
                 guard let self else { return }
