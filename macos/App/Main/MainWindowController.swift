@@ -117,7 +117,8 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
         }
         moreItem.menu = menu
         track { [weak self, weak meeting] in
-            guard let self, let meeting else { return }
+            // A meeting left while it was still generating stays alive; only the shown one drives the toolbar.
+            guard let self, let meeting, meeting === self.meeting else { return }
             let generating = meeting.summary.isGenerating
             generateItem.label = generating ? "Stop" : "Generate"
             generateItem.toolTip = generating ? "Stop writing the summary" : "Generate a summary"
