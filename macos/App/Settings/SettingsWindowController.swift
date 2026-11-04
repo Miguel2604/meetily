@@ -38,7 +38,8 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
-/// A settings tab: a fixed-width column of titled sections. The window takes the pane's fitting size on a tab switch.
+/// A settings tab: a fixed-width column of titled sections that scrolls when it is taller than the screen. The window
+/// takes the pane's fitting size on a tab switch.
 class SettingsPane: NSViewController {
     let column = NSStackView()
     static let width: CGFloat = 620
@@ -56,7 +57,17 @@ class SettingsPane: NSViewController {
         column.spacing = 12
         column.edgeInsets = NSEdgeInsets(top: 20, left: 28, bottom: 24, right: 28)
         column.widthAnchor.constraint(equalToConstant: Self.width).isActive = true
-        view = column
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.documentView = column
+        column.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            column.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            column.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+        ])
+        view = scroll
     }
 
     override func viewWillAppear() {
@@ -66,8 +77,9 @@ class SettingsPane: NSViewController {
 
     /// Call after showing or hiding content so the window follows.
     func fit() {
-        view.layoutSubtreeIfNeeded()
-        preferredContentSize = view.fittingSize
+        column.layoutSubtreeIfNeeded()
+        let screen = (view.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 800
+        preferredContentSize = NSSize(width: Self.width, height: min(column.fittingSize.height, screen - 100)) // 100: title bar and tabs
         guard let window = view.window, window.isVisible else { return }
         let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: preferredContentSize)).size
         window.setFrame(NSRect(x: window.frame.minX, y: window.frame.maxY - size.height, width: size.width, height: size.height), display: true, animate: true)
@@ -90,16 +102,8 @@ class SettingsPane: NSViewController {
         view.widthAnchor.constraint(equalToConstant: Self.width - 56).isActive = true
     }
 
-    /// Two-column form: trailing-aligned labels, then controls.
-    func form(_ rows: [(String, NSView)]) -> NSGridView {
-        let grid = NSGridView(views: rows.map { [NSTextField(labelWithString: $0.0.isEmpty ? "" : $0.0 + ":"), $0.1] })
-        grid.rowSpacing = 10
-        grid.columnSpacing = 8
-        grid.rowAlignment = .firstBaseline
-        grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 0).width = 150
-        return grid
-    }
+    /// A grouped form: each row's label leading, its control trailing.
+    func form(_ rows: [(String, NSView)]) -> NSView { FormSection(rows: rows) }
 
     static func checkbox(_ title: String, _ on: Bool, target: AnyObject, action: Selector) -> NSButton {
         let box = NSButton(checkboxWithTitle: title, target: target, action: action)

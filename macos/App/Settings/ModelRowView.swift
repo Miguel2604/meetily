@@ -8,7 +8,7 @@ final class ModelRowView: CardView {
     private let status = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
     private let progress = NSProgressIndicator()
     private lazy var primary = NSButton.meety("Download", target: self, action: #selector(primaryAction))
-    private lazy var delete = NSButton.meety("", symbol: "trash", target: self, action: #selector(deleteAction))
+    private lazy var delete = NSButton.meetyCircle("trash", label: "Delete \(item.title)", target: self, action: #selector(deleteAction))
 
     init(item: ModelLibrary.Item, library: ModelLibrary) {
         self.item = item
@@ -25,7 +25,6 @@ final class ModelRowView: CardView {
         primary.controlSize = .regular
         delete.controlSize = .regular
         delete.toolTip = "Delete the model to free up space"
-        delete.setAccessibilityLabel("Delete \(item.title)")
 
         let heading = NSStackView(views: [title, size])
         heading.spacing = 6

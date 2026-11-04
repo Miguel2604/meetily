@@ -46,10 +46,10 @@ extension NSGlassEffectView {
     }
 }
 
-/// A rounded, bordered surface (the web app's `Card`). Colors re-resolve on appearance changes in `updateLayer`.
+/// A rounded, grouped surface, as System Settings draws its groups. Colors re-resolve on appearance changes in `updateLayer`.
 class CardView: NSView {
-    var fill: NSColor = .windowBackgroundColor { didSet { needsDisplay = true } }
-    var stroke: NSColor? = .separatorColor { didSet { needsDisplay = true } }
+    var fill: NSColor = .quaternarySystemFill { didSet { needsDisplay = true } }
+    var stroke: NSColor? { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -67,6 +67,40 @@ class CardView: NSView {
         layer?.borderColor = stroke?.cgColor
         layer?.borderWidth = stroke == nil ? 0 : 1
     }
+}
+
+/// A System Settings–style form group: rows of label and control in one rounded box, hairlines between rows.
+/// A row with an empty label is its control alone, leading-aligned (hints, button rows).
+final class FormSection: CardView {
+    init(rows: [(String, NSView)]) {
+        super.init(frame: .zero)
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        for (index, (label, control)) in rows.enumerated() {
+            if index > 0 {
+                let rule = NSBox()
+                rule.boxType = .separator
+                stack.addArrangedSubview(rule)
+                rule.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 14).isActive = true
+                rule.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -14).isActive = true
+            }
+            let row = NSStackView(views: label.isEmpty ? [control] : [NSTextField(labelWithString: label), NSView(), control])
+            row.alignment = .centerY
+            row.edgeInsets = NSEdgeInsets(top: 9, left: 14, bottom: 9, right: 14)
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("code-built UI") }
 }
 
 /// Centered icon, title, message and an optional action (EmptyStateSummary.tsx and friends).
