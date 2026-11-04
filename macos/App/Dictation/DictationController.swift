@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Audio
 import Observation
+import os
 import Summary
 import Transcription
 
@@ -76,6 +77,8 @@ final class DictationController {
     }
 
     private func handle(_ event: NSEvent) {
+        // Our own ⌘V paste would otherwise read as typing and cancel a dictation already under way.
+        guard event.cgEvent?.getIntegerValueField(.eventSourceUnixProcessID) != Int64(getpid()) else { return }
         let action: PushToTalk.Action?
         if event.type == .keyDown {
             action = ptt.keyDown()
@@ -86,6 +89,7 @@ final class DictationController {
                                       others: !flags.intersection([.command, .control, .shift, .function]).isEmpty || device & 0x20 != 0,
                                       at: .now)
         }
+        if let action { Logger(subsystem: "com.meetily.ai", category: "dictation").info("Push to talk: \(String(describing: action), privacy: .public)") }
         switch action {
         case .start: start()
         case .finish:
@@ -203,6 +207,7 @@ final class DictationOverlay {
     }
 
     func flash(_ message: String) {
+        Logger(subsystem: "com.meetily.ai", category: "dictation").notice("Dictation pill: \(message, privacy: .public)")
         present("exclamationmark.triangle.fill", .systemOrange, message)
         flashing = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))

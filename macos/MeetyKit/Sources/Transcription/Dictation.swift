@@ -1,6 +1,9 @@
 import Audio
 import Foundation
 import Observation
+import os
+
+private let log = Logger(subsystem: "com.meetily.ai", category: "dictation")
 
 /// Hold-to-talk on one modifier key held alone (Right Option by default), fed from the app's key monitors.
 /// Typing or another modifier during the hold is a keyboard shortcut, so it cancels.
@@ -75,8 +78,9 @@ public final class Dictation {
 
     /// Starts listening. Ignored while already listening; throws when the microphone fails to start.
     public func start() throws {
-        guard source == nil else { return }
+        guard source == nil else { return log.info("Dictation: start ignored, still listening") }
         let source = try capture()
+        log.info("Dictation: listening")
         self.source = source
         collected = []
         let engine = engine
@@ -102,7 +106,10 @@ public final class Dictation {
     /// Stops listening, then transcribes, cleans and delivers once the dictations before it are delivered. Returns
     /// the delivered text; nil when nothing was heard, it was cancelled, or it wasn't listening.
     @discardableResult public func finish() async throws -> String? {
-        guard source != nil, let loading else { return nil }
+        guard source != nil, let loading else {
+            log.info("Dictation: finish ignored, not listening")
+            return nil
+        }
         let id = generation
         self.loading = nil
         processing += 1
@@ -111,9 +118,11 @@ public final class Dictation {
         try? await Task.sleep(for: tail)
         guard id == generation else { return nil }
         let samples = stopCapture()
+        log.info("Dictation: captured \(samples.count) samples, queued")
         let previous = queue
         let turn = Task { () async throws -> String? in
             _ = await previous?.value
+            log.info("Dictation: transcribing")
             guard id == self.generation else { return nil }
             self.stage = .transcribing
             let audio = try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate).process(samples)
@@ -124,10 +133,13 @@ public final class Dictation {
             } catch where id != self.generation {
                 return nil // cancelled while the engine loaded
             }
+            // Counts only: the text is the user's.
+            log.info("Dictation: \(samples.count) samples, \(text.count) characters heard")
             guard id == self.generation, !text.isEmpty else { return nil }
             self.stage = .cleaning
             let cleaned = await self.clean(text)
             guard id == self.generation else { return nil }
+            log.info("Dictation: delivering \(cleaned.count) characters")
             self.deliver(cleaned)
             return cleaned
         }
