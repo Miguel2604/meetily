@@ -264,3 +264,40 @@ struct RealCaptureSessionTests {
     }
 }
 
+/// The whole live path with real models: speech played through the speakers reaches the microphone and the
+/// system tap and comes back as text (MEETY_REAL_DEVICES=1 MEETY_REAL_MODELS=1; unmute the output first).
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"
+                              && ProcessInfo.processInfo.environment["MEETY_REAL_MODELS"] == "1"))
+struct RealLiveTranscriptionTests {
+    @Test func `spoken sentences come back as text in a recording of the right length`() async throws {
+        let engine = try await ParakeetModels(directory: Paths.parakeetModels).engine(.ultra)
+        let vad = try await VoiceModel.load(directory: Paths.models.appending(path: "vad"))
+        let folder = tempDir().appending(path: "RealLive")
+        let store = try tempStore()
+        let microphone = try LiveMicrophone(preferred: nil)
+        let system = SystemAudioCapture()
+        try system.start()
+        let session = try RecordingSession(title: "RealLive", folder: folder, store: store, engine: engine,
+                                           detector: vad.detector(), microphone: microphone, system: system)
+        let start = Date()
+        await session.start()
+        for sentence in ["We reviewed the quarterly budget and agreed to ship the beta on Friday.",
+                         "Maria owns the launch checklist.", "Next week we will test the onboarding flow."] {
+            let say = Process()
+            say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+            say.arguments = ["-v", "Samantha", sentence]
+            try say.run()
+            say.waitUntilExit()
+            try await Task.sleep(for: .seconds(2))
+        }
+        let id = try await session.stop()
+        let wall = Date().timeIntervalSince(start)
+        let text = try await store.transcripts(meetingID: id).map(\.transcript).joined(separator: " | ")
+        let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "metadata.json"))) as! [String: Any]
+        let recorded = try #require(metadata["duration_seconds"] as? Double)
+        print("recorded \(recorded) s in \(wall) s: \(text)")
+        #expect(abs(recorded - wall) < 1.5)
+        #expect(["friday", "checklist", "onboarding"].allSatisfy(text.lowercased().contains)) // through speakers and mic, one word can slip
+    }
+}
+

@@ -77,9 +77,17 @@ public final class MicrophoneCapture: @unchecked Sendable { // start/stop/drain 
             self?.onConfigurationChange?()
         }
         engine.prepare()
-        // A just-stopped voice-processing unit releases the device asynchronously ('!dev'); retry briefly.
-        for attempt in 1...4 {
-            do { try engine.start(); break } catch where attempt < 4 { Thread.sleep(forTimeInterval: 0.25) }
+        do {
+            // A just-stopped voice-processing unit releases the device asynchronously ('!dev'); retry briefly.
+            for attempt in 1...4 {
+                do { try engine.start(); break } catch where attempt < 4 { Thread.sleep(forTimeInterval: 0.25) }
+            }
+        } catch where input.isVoiceProcessingEnabled {
+            // The voice-processing unit intermittently fails to initialize (-10875); record unprocessed rather than not at all.
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            try? input.setVoiceProcessingEnabled(false)
+            return try start(device: device, voiceProcessing: false)
         }
         self.ring = ring
         self.resampler = try Resampler(from: format.sampleRate, to: Self.sampleRate)
