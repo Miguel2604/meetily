@@ -386,7 +386,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     }
 }
 
-private extension Recorder.Phase {
+extension Recorder.Phase {
     var isStarting: Bool { if case .starting = self { true } else { false } }
     var isFailed: Bool { if case .failed = self { true } else { false } }
 }

@@ -1,7 +1,7 @@
 import AppKit
 import Core
 
-/// Source-list sidebar (Sidebar/index.tsx): record button, transcript search, Home, and meetings by date.
+/// Source-list sidebar (Sidebar/index.tsx): Home and meetings by date. Its transcript search field lives in the toolbar.
 final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate, NSMenuItemValidation {
     private final class Node {
         enum Kind { case home, group(String), meeting(Meeting, snippet: String?) }
@@ -12,9 +12,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private let model: AppModel
-    private let record = NSButton.meety("Record a meeting", symbol: "record.circle", role: .primary, target: nil, action: Selector(("newRecording:")))
     private let outline = SidebarOutlineView()
-    private let search = NSSearchField()
+    let search = NSSearchField()
     private let emptyLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private var roots: [Node] = []
     private var matches: [SearchResult] = []
@@ -54,21 +53,15 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
 
         emptyLabel.alignment = .center
         let root = NSView()
-        for v in [record, search, scroll, emptyLabel] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(v) }
+        for v in [scroll, emptyLabel] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(v) }
         NSLayoutConstraint.activate([
-            record.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 8),
-            record.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            record.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            search.topAnchor.constraint(equalTo: record.bottomAnchor, constant: 10),
-            search.leadingAnchor.constraint(equalTo: record.leadingAnchor),
-            search.trailingAnchor.constraint(equalTo: record.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 8),
+            scroll.topAnchor.constraint(equalTo: root.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            emptyLabel.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 80),
-            emptyLabel.leadingAnchor.constraint(equalTo: record.leadingAnchor),
-            emptyLabel.trailingAnchor.constraint(equalTo: record.trailingAnchor),
+            emptyLabel.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 80),
+            emptyLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            emptyLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
         ])
         view = root
     }
@@ -84,12 +77,6 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             guard let self else { return }
             _ = model.route
             selectRoute()
-        }
-        track { [weak self] in
-            guard let self else { return }
-            let busy = switch model.recorder.phase { case .idle, .failed: false; default: true }
-            record.title = busy ? "Recording…" : "Record a meeting"
-            record.isEnabled = !busy
         }
     }
 

@@ -2,11 +2,14 @@ import AppKit
 import Transcription
 import UniformTypeIdentifiers
 
-/// The main window: sidebar of meetings and a content area routed by `AppModel.route`.
-final class MainWindowController: NSWindowController, NSMenuItemValidation {
+/// The main window: sidebar of meetings and a content area routed by `AppModel.route`, under a glass toolbar
+/// with the window title, Record (Stop while recording) and transcript search.
+final class MainWindowController: NSWindowController, NSMenuItemValidation, NSToolbarDelegate {
     private let model: AppModel
     private let sidebar: SidebarViewController
     private let router: ContentRouter
+    private let recordItem = NSToolbarItem(itemIdentifier: .record)
+    private var clock: Timer?
 
     init(model: AppModel) {
         self.model = model
@@ -23,7 +26,6 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
         let window = NSWindow(contentViewController: split)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.title = "Meety"
-        window.titleVisibility = .hidden
         window.toolbarStyle = .unified
         window.minSize = NSSize(width: 760, height: 480)
         window.setContentSize(NSSize(width: 1100, height: 720))
@@ -33,6 +35,73 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
         super.init(window: window)
         window.delegate = self
         window.registerForDraggedTypes([.fileURL])
+
+        let toolbar = NSToolbar(identifier: "Main")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
+        recordItem.style = .prominent
+        recordItem.autovalidates = false
+        recordItem.target = self
+        track { [weak self] in self?.renderRecord() }
+        track { [weak self] in self?.renderTitle() }
+    }
+
+    // MARK: Toolbar
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .record, .search]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        switch id {
+        case .record: return recordItem
+        case .search:
+            let item = NSSearchToolbarItem(itemIdentifier: id)
+            item.searchField = sidebar.search
+            item.label = "Search"
+            return item
+        default: return nil
+        }
+    }
+
+    /// Record, or Stop with the elapsed time while recording; disabled while starting or stopping.
+    private func renderRecord() {
+        let phase = model.recorder.phase
+        let live = phase == .recording || phase == .paused
+        let busy = !live && phase != .idle && !phase.isFailed
+        recordItem.isEnabled = !busy
+        recordItem.backgroundTintColor = .systemRed
+        recordItem.action = live ? #selector(stopRecording(_:)) : #selector(newRecording(_:))
+        recordItem.label = live ? "Stop" : "Record"
+        recordItem.toolTip = live ? "Stop recording (⌘.)" : "Record a meeting (⌘N)"
+        recordItem.image = NSImage(systemSymbolName: live ? "stop.fill" : "record.circle", accessibilityDescription: recordItem.label)
+        if live, clock == nil {
+            clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tickClock() } }
+            tickClock()
+        } else if !live {
+            clock?.invalidate()
+            clock = nil
+            recordItem.title = ""
+        }
+    }
+
+    private func tickClock() { recordItem.title = Clock.duration(model.recorder.elapsed()) }
+
+    /// "Meety" and the meeting count on Home; the meeting's title and date on a meeting.
+    private func renderTitle() {
+        guard let window else { return }
+        switch model.route {
+        case .home:
+            window.title = "Meety"
+            window.subtitle = model.meetings.count == 1 ? "1 meeting" : "\(model.meetings.count) meetings"
+        case .meeting(let id):
+            let meeting = model.meetings.first { $0.id == id }
+            window.title = meeting?.title ?? "Meeting"
+            window.subtitle = meeting?.createdDate?.formatted(date: .long, time: .shortened) ?? ""
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("code-built UI") }
@@ -143,6 +212,11 @@ extension MainWindowController: NSWindowDelegate {
             stack.centerYAnchor.constraint(equalTo: card.centerYAnchor),
         ])
     }
+}
+
+private extension NSToolbarItem.Identifier {
+    static let record = Self("record")
+    static let search = Self("search")
 }
 
 /// Swaps the content pane for the current route.
