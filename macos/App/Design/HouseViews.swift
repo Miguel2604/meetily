@@ -16,6 +16,34 @@ extension NSButton {
         }
         return button
     }
+
+    /// A round, icon-only glass button; `label` is its accessibility label and tooltip.
+    static func meetyCircle(_ symbol: String, label: String, role: Role = .secondary, target: AnyObject?, action: Selector?) -> NSButton {
+        let button = meety("", role: role, target: target, action: action)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.imagePosition = .imageOnly
+        button.borderShape = .circle
+        button.toolTip = label
+        return button
+    }
+}
+
+extension NSGlassEffectView {
+    /// Liquid Glass around `content` with padding. Glass is for controls and chrome, never behind long text.
+    convenience init(wrapping content: NSView, inset: NSEdgeInsets, cornerRadius: CGFloat) {
+        self.init(frame: .zero)
+        let box = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: inset.left),
+            content.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -inset.right),
+            content.topAnchor.constraint(equalTo: box.topAnchor, constant: inset.top),
+            content.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -inset.bottom),
+        ])
+        contentView = box
+        self.cornerRadius = cornerRadius
+    }
 }
 
 /// A rounded, bordered surface (the web app's `Card`). Colors re-resolve on appearance changes in `updateLayer`.
