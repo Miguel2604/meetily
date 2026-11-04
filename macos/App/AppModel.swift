@@ -86,7 +86,7 @@ final class AppModel {
             throw RecordingError(description: "Microphone access is off. Allow Meety in System Settings › Privacy & Security › Microphone.")
         }
 
-        report("Loading transcription model…")
+        report("Loading transcription model… The first load after an install or update compiles it for the Neural Engine and can take a few minutes.")
         let engine: any TranscriptionEngine
         do {
             switch EngineChoice.route(language: settings.language, config: try await store.transcriptConfig()) {
