@@ -156,3 +156,26 @@ struct RealParakeetTests {
         #expect(text.lowercased().contains("budget"))
     }
 }
+
+/// Dictation needs a short clip back as text in well under a second on a warm model.
+/// MEETY_REAL_MODELS=1 swift test -c release --filter DictationLatency
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_MODELS"] == "1"))
+struct DictationLatencyTests {
+    @Test(arguments: [ParakeetModel.ultra, .phonon2])
+    func `a five second clip transcribes fast on a warm model`(model: ParakeetModel) async throws {
+        let models = ParakeetModels(directory: Paths.parakeetModels)
+        try #require(await models.status(model) == .available)
+        let engine = try await models.engine(model)
+        var clip = try spokenSamples("Remind me to send the quarterly budget to Sarah before the Thursday meeting, and copy the finance team.")
+        clip = Array(clip.prefix(5 * 16_000)) + [Float](repeating: 0, count: max(0, 5 * 16_000 - clip.count))
+        _ = try await engine.transcribe(samples: clip) // warm-up
+        var times: [Duration] = []
+        for _ in 0..<5 {
+            let start = ContinuousClock.now
+            _ = try await engine.transcribe(samples: clip)
+            times.append(ContinuousClock.now - start)
+        }
+        print("\(model.rawValue) 5 s clip:", times.map { $0.formatted(.units(allowed: [.milliseconds])) })
+        #expect(times.max()! < .seconds(1))
+    }
+}
