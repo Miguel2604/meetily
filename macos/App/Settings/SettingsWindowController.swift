@@ -81,7 +81,7 @@ class SettingsPane: NSViewController {
             if column.arrangedSubviews.count > 1, let previous = column.arrangedSubviews.dropLast().last { column.setCustomSpacing(24, after: previous) }
         }
         for view in views { full(view) }
-        if let note { full(NSTextField.meety(note, font: Typography.caption, color: .meetyMutedForeground)) }
+        if let note { full(NSTextField.meety(note, font: Typography.caption, color: .secondaryLabelColor)) }
     }
 
     /// Adds a view that spans the column's content width.
@@ -236,7 +236,7 @@ final class AboutPane: SettingsPane {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = "Version \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?"))"
         let name = NSStackView(views: [NSTextField.meety("Meety", font: Typography.title),
-                                       NSTextField.meety(version, font: Typography.callout, color: .meetyMutedForeground)])
+                                       NSTextField.meety(version, font: Typography.callout, color: .secondaryLabelColor)])
         name.orientation = .vertical
         name.alignment = .leading
         name.spacing = 2
@@ -251,7 +251,7 @@ final class AboutPane: SettingsPane {
             ("No per-minute bill", "Local transcription and summaries cost nothing to run."),
         ] {
             let text = NSStackView(views: [NSTextField.meety(title, font: Typography.bodyMedium),
-                                           NSTextField.meety(body, font: Typography.callout, color: .meetyMutedForeground)])
+                                           NSTextField.meety(body, font: Typography.callout, color: .secondaryLabelColor)])
             text.orientation = .vertical
             text.alignment = .leading
             text.spacing = 2

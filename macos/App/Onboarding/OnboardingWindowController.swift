@@ -27,12 +27,12 @@ final class OnboardingViewController: NSViewController {
     private let onFinish: () -> Void
     private var step = Step.welcome
     private let content = NSStackView()
-    private let stepLabel = NSTextField.meety("", font: Typography.caption, color: .meetyMutedForeground)
+    private let stepLabel = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
     private lazy var back = NSButton.meety("Back", target: self, action: #selector(goBack))
     private lazy var next = NSButton.meety("Get Started", role: .primary, target: self, action: #selector(goNext))
     private var permissionRows: [(Permission, NSTextField, NSButton)] = []
     private var timer: Timer?
-    private let footnote = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let footnote = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
 
     /// The transcription model onboarding sets up (the Tauri default), and the summary model for this Mac.
     private let transcription = ModelLibrary.Item.parakeet(.default)
@@ -98,7 +98,7 @@ final class OnboardingViewController: NSViewController {
 
     private func heading(_ title: String, _ subtitle: String) {
         add(NSTextField.meety(title, font: NSFont.systemFont(ofSize: 24, weight: .semibold)))
-        let sub = NSTextField.meety(subtitle, font: Typography.body, color: .meetyMutedForeground)
+        let sub = NSTextField.meety(subtitle, font: Typography.body, color: .secondaryLabelColor)
         add(sub)
         content.setCustomSpacing(24, after: sub)
     }
@@ -118,13 +118,13 @@ final class OnboardingViewController: NSViewController {
         for (symbol, text) in [("lock", "Your data never leaves your device"), ("text.badge.checkmark", "Notes and action items written for you"),
                                ("wifi.slash", "Works offline, no cloud required")] {
             let icon = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!)
-            icon.contentTintColor = .meetyMutedForeground
+            icon.contentTintColor = .secondaryLabelColor
             icon.widthAnchor.constraint(equalToConstant: 22).isActive = true
             let row = NSStackView(views: [icon, NSTextField.meety(text, font: Typography.body)])
             row.spacing = 10
             content.addArrangedSubview(row)
         }
-        let time = NSTextField.meety("Takes less than 3 minutes", font: Typography.callout, color: .meetyMutedForeground)
+        let time = NSTextField.meety("Takes less than 3 minutes", font: Typography.callout, color: .secondaryLabelColor)
         content.addArrangedSubview(time)
         content.setCustomSpacing(24, after: content.arrangedSubviews[content.arrangedSubviews.count - 2])
         next.title = "Get Started"
@@ -137,16 +137,16 @@ final class OnboardingViewController: NSViewController {
             let card = CardView()
             let icon = NSImageView(image: NSImage(systemSymbolName: permission.symbol, accessibilityDescription: nil)!)
             icon.symbolConfiguration = .init(pointSize: 18, weight: .regular)
-            icon.contentTintColor = .meetyForeground
+            icon.contentTintColor = .labelColor
             icon.widthAnchor.constraint(equalToConstant: 28).isActive = true
-            let detail = NSTextField.meety(permission.detail, font: Typography.callout, color: .meetyMutedForeground)
+            let detail = NSTextField.meety(permission.detail, font: Typography.callout, color: .secondaryLabelColor)
             detail.preferredMaxLayoutWidth = 320
             detail.widthAnchor.constraint(equalToConstant: 320).isActive = true
             let text = NSStackView(views: [NSTextField.meety(permission.title, font: Typography.bodyMedium), detail])
             text.orientation = .vertical
             text.alignment = .leading
             text.spacing = 2
-            let status = NSTextField.meety("Checking…", font: Typography.callout, color: .meetyMutedForeground)
+            let status = NSTextField.meety("Checking…", font: Typography.callout, color: .secondaryLabelColor)
             let button = NSButton.meety("Enable", target: self, action: #selector(requestPermission(_:)))
             button.controlSize = .regular
             button.tag = Permission.allCases.firstIndex(of: permission)!
@@ -188,7 +188,7 @@ final class OnboardingViewController: NSViewController {
                 case .denied: "Not allowed"
                 case .notDetermined: "Not set"
                 }
-                label.textColor = status == .granted ? .meetyForeground : .meetyMutedForeground
+                label.textColor = status == .granted ? .labelColor : .secondaryLabelColor
                 button.isHidden = status == .granted
                 button.title = status == .denied ? "Open Settings" : "Enable"
             }

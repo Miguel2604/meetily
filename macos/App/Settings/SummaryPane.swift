@@ -25,8 +25,8 @@ final class SummaryPane: SettingsPane {
     private let topP = NSTextField()
     private let pullName = NSTextField()
     private let pullProgress = NSProgressIndicator()
-    private let hint = NSTextField.meety("", font: Typography.caption, color: .meetyMutedForeground)
-    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let hint = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
+    private let status = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let language = NSPopUpButton()
     private lazy var pullButton = NSButton(title: "Pull", target: self, action: #selector(pull))
     private lazy var deleteOllama = NSButton(title: "Delete…", target: self, action: #selector(deleteOllamaModel))
@@ -152,7 +152,7 @@ final class SummaryPane: SettingsPane {
 
     private func show(_ message: String, error: Bool = false) {
         status.stringValue = message
-        status.textColor = error ? .meetyDestructive : .meetyMutedForeground
+        status.textColor = error ? .systemRed : .secondaryLabelColor
     }
 
     private var ollamaEndpoint: String? { config.ollamaEndpoint.isEmpty ? nil : config.ollamaEndpoint }

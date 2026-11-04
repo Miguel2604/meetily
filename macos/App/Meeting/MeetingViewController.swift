@@ -16,7 +16,7 @@ final class MeetingViewController: NSSplitViewController {
     // Transcript pane
     private let transcriptList = TranscriptListView()
     private let titleLabel = NSTextField.meety("", font: Typography.title)
-    private let dateLabel = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let dateLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let audioSlot = NSStackView()
     private var audioBar: AudioBarView?
     private lazy var copyTranscriptButton = small("Copy", "doc.on.doc", #selector(copyTranscript), tip: "Copy Transcript")
@@ -37,7 +37,7 @@ final class MeetingViewController: NSSplitViewController {
     private let summaryEditor = MarkdownEditor()
     private let notesEditor = MarkdownEditor()
     private let writing = NSStackView()
-    private let errorLabel = NSTextField.meety("", font: Typography.callout, color: .meetyDestructive)
+    private let errorLabel = NSTextField.meety("", font: Typography.callout, color: .systemRed)
     private lazy var empty = EmptyStateView(
         symbol: "doc.questionmark", title: "No Summary Generated Yet",
         message: "Generate an AI-powered summary of your meeting transcript to get key points, action items, and decisions.",
@@ -134,7 +134,7 @@ final class MeetingViewController: NSSplitViewController {
         let spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.startAnimation(nil)
-        writing.setViews([spinner, NSTextField.meety("Writing the summary…", font: Typography.callout, color: .meetyMutedForeground)], in: .center)
+        writing.setViews([spinner, NSTextField.meety("Writing the summary…", font: Typography.callout, color: .secondaryLabelColor)], in: .center)
         writing.orientation = .vertical
 
         summaryEditor.onChange = { [weak self] text in self?.summary.markdown = text }

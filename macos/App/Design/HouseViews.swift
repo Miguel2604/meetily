@@ -3,17 +3,16 @@ import AppKit
 extension NSButton {
     enum Role { case primary, secondary, destructive }
 
-    /// House buttons are native push buttons tinted with the Meety tokens, so focus rings,
-    /// hover, disabled state and accessibility come from AppKit.
+    /// House buttons are native glass buttons, so focus rings, hover, disabled state and accessibility come from AppKit.
     static func meety(_ title: String, symbol: String? = nil, role: Role = .secondary, target: AnyObject?, action: Selector?) -> NSButton {
         let button = NSButton(title: title, target: target, action: action)
-        button.bezelStyle = .push
+        button.bezelStyle = .glass
         button.controlSize = .large
         if let symbol { button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil); button.imagePosition = .imageLeading }
         switch role {
-        case .primary: button.bezelColor = .meetyPrimary
+        case .primary: button.tintProminence = .primary
         case .secondary: break
-        case .destructive: button.bezelColor = .meetyDestructive
+        case .destructive: button.tintProminence = .primary; button.bezelColor = .systemRed
         }
         return button
     }
@@ -21,8 +20,8 @@ extension NSButton {
 
 /// A rounded, bordered surface (the web app's `Card`). Colors re-resolve on appearance changes in `updateLayer`.
 class CardView: NSView {
-    var fill: NSColor = .meetyBackground { didSet { needsDisplay = true } }
-    var stroke: NSColor? = .meetyBorder { didSet { needsDisplay = true } }
+    var fill: NSColor = .windowBackgroundColor { didSet { needsDisplay = true } }
+    var stroke: NSColor? = .separatorColor { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -50,10 +49,10 @@ final class EmptyStateView: NSView {
     init(symbol: String, title: String, message: String, action: (title: String, symbol: String?, target: AnyObject?, selector: Selector)? = nil) {
         let icon = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
         icon.symbolConfiguration = .init(pointSize: 40, weight: .light)
-        icon.contentTintColor = .meetyInput
+        icon.contentTintColor = .tertiaryLabelColor
         let titleLabel = NSTextField.meety(title, font: Typography.headline)
         titleLabel.alignment = .center
-        messageLabel = NSTextField.meety(message, font: Typography.callout, color: .meetyMutedForeground)
+        messageLabel = NSTextField.meety(message, font: Typography.callout, color: .secondaryLabelColor)
         messageLabel.alignment = .center
         messageLabel.preferredMaxLayoutWidth = 360
         button = action.map { NSButton.meety($0.title, symbol: $0.symbol, role: .primary, target: $0.target, action: $0.selector) }

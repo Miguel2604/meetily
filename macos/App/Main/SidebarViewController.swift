@@ -15,7 +15,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private let record = NSButton.meety("Record a meeting", symbol: "record.circle", role: .primary, target: nil, action: Selector(("newRecording:")))
     private let outline = SidebarOutlineView()
     private let search = NSSearchField()
-    private let emptyLabel = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let emptyLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private var roots: [Node] = []
     private var matches: [SearchResult] = []
     private var searchTask: Task<Void, Never>?
@@ -262,14 +262,14 @@ final class SidebarOutlineView: NSOutlineView {
 
 /// A sidebar row: title (and a transcript-match snippet while searching), or a section header.
 final class SidebarCell: NSTableCellView {
-    private let snippet = NSTextField.meety("", font: Typography.caption, color: .meetyMutedForeground)
+    private let snippet = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
 
     init(header: Bool) {
         super.init(frame: .zero)
         let title = NSTextField(labelWithString: "")
         title.lineBreakMode = .byTruncatingTail
         title.font = header ? Typography.caption : Typography.body
-        title.textColor = header ? .meetyMutedForeground : .labelColor
+        title.textColor = header ? .secondaryLabelColor : .labelColor
         textField = title
         let icon = NSImageView()
         imageView = icon

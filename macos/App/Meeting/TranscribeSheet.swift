@@ -35,7 +35,7 @@ final class TranscribeSheet: NSViewController {
     private let language = NSPopUpButton()
     private let engine = NSPopUpButton()
     private let progress = NSProgressIndicator()
-    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let status = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private lazy var run = NSButton.meety("", role: .primary, target: self, action: #selector(start))
     private lazy var cancel = NSButton.meety("Cancel", target: self, action: #selector(cancelOrClose))
     private var task: Task<Void, Never>?

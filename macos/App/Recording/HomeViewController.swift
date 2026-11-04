@@ -11,18 +11,18 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
 
     // Idle
     private let idle = NSStackView()
-    private let recentCount = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let recentCount = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let recentList = NSStackView()
 
     // Active
     private let active = NSStackView()
     private let titleField = NSTextField(string: "")
-    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let status = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let statusDot = CardView()
     private let noticeBanner = CardView()
     private let noticeLabel = NSTextField.meety("", font: Typography.callout)
     private let transcript = TranscriptListView()
-    private let listening = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let listening = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
 
     // Control bar
     private let bar = CardView()
@@ -30,7 +30,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     private let micPopup = NSPopUpButton()
     private let systemPopup = NSPopUpButton()
     private let spinner = NSProgressIndicator()
-    private let progressLabel = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let progressLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private lazy var pauseButton = NSButton.meety("Pause", symbol: "pause.fill", target: self, action: #selector(togglePause))
     private lazy var stopButton = NSButton.meety("Stop", symbol: "stop.fill", role: .destructive, target: self, action: #selector(stop))
     private let micMeter = LevelMeterView(label: "Microphone level")
@@ -111,7 +111,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         let heading = NSTextField.meety("Ready to record", font: NSFont.systemFont(ofSize: 24, weight: .semibold))
         let intro = NSTextField.meety(
             "Start recording when the call begins. Meety writes the transcript as people talk and turns it into notes afterwards. Audio and text stay on this computer.",
-            font: NSFont.systemFont(ofSize: 15), color: .meetyMutedForeground)
+            font: NSFont.systemFont(ofSize: 15), color: .secondaryLabelColor)
         let recentTitle = NSTextField.meety("Recent meetings", font: Typography.bodyMedium)
         let header = NSStackView(views: [recentTitle, NSView(), recentCount])
         let rule = NSBox()
@@ -152,7 +152,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         noticeRow.spacing = 8
         noticeRow.translatesAutoresizingMaskIntoConstraints = false
         noticeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        noticeBanner.fill = .meetyMuted
+        noticeBanner.fill = .quaternarySystemFill
         noticeBanner.stroke = nil
         noticeBanner.addSubview(noticeRow)
         pin(noticeRow, in: noticeBanner, inset: 8)
@@ -179,7 +179,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         elapsed.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         let micIcon = NSImageView(image: NSImage(systemSymbolName: "mic", accessibilityDescription: nil)!)
         let systemIcon = NSImageView(image: NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil)!)
-        for icon in [micIcon, systemIcon] { icon.contentTintColor = .meetyMutedForeground }
+        for icon in [micIcon, systemIcon] { icon.contentTintColor = .secondaryLabelColor }
         let meters = NSStackView(views: [micIcon, micMeter, systemIcon, systemMeter])
         meters.spacing = 6
 
@@ -190,7 +190,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         row.spacing = 10
         row.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
         row.translatesAutoresizingMaskIntoConstraints = false
-        bar.fill = .meetyBackground
+        bar.fill = .windowBackgroundColor
         bar.shadow = NSShadow()
         bar.layer?.shadowOpacity = 0.12
         bar.layer?.shadowRadius = 12
@@ -201,7 +201,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
 
     private func buildConsent() {
         let icon = NSImageView(image: NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)!)
-        icon.contentTintColor = .meetySignal
+        icon.contentTintColor = .controlAccentColor
         let title = NSTextField.meety("Recording Started", font: Typography.bodyMedium)
         let header = NSStackView(views: [icon, title])
         header.spacing = 6
@@ -259,7 +259,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         pauseButton.title = phase == .paused ? "Resume" : "Pause"
         pauseButton.image = NSImage(systemSymbolName: phase == .paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
         status.stringValue = phase == .paused ? "Paused" : isLive ? "Recording" : progressLabel.stringValue
-        statusDot.fill = phase == .paused ? .meetyInput : .meetySignal
+        statusDot.fill = phase == .paused ? .tertiaryLabelColor : .controlAccentColor
         if titleField.currentEditor() == nil { titleField.stringValue = recorder.title }
         noticeLabel.stringValue = recorder.notice ?? ""
         noticeBanner.isHidden = recorder.notice == nil
@@ -292,7 +292,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         if meetings.isEmpty {
             let empty = CardView()
             empty.fill = .clear
-            let label = NSTextField.meety("Your first recording will appear here once it is saved.", font: Typography.callout, color: .meetyMutedForeground)
+            let label = NSTextField.meety("Your first recording will appear here once it is saved.", font: Typography.callout, color: .secondaryLabelColor)
             label.translatesAutoresizingMaskIntoConstraints = false
             empty.addSubview(label)
             pin(label, in: empty, inset: 12)
@@ -307,7 +307,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
             row.imagePosition = .imageTrailing
             row.imageHugsTitle = false
             row.font = Typography.body
-            row.contentTintColor = .meetyMutedForeground
+            row.contentTintColor = .secondaryLabelColor
             row.lineBreakMode = .byTruncatingTail
             row.identifier = .init(meeting.id)
             row.heightAnchor.constraint(equalToConstant: 40).isActive = true

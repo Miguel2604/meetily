@@ -124,8 +124,8 @@ extension MainWindowController: NSWindowDelegate {
         guard show else { return }
         let card = CardView()
         card.identifier = id
-        card.fill = NSColor.meetyBackground.withAlphaComponent(0.92)
-        card.stroke = .meetyForeground
+        card.fill = NSColor.windowBackgroundColor.withAlphaComponent(0.92)
+        card.stroke = .labelColor
         let icon = NSImageView(image: NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)!)
         icon.symbolConfiguration = .init(pointSize: 32, weight: .light)
         let stack = NSStackView(views: [icon, NSTextField.meety("Drop audio file to import", font: Typography.headline)])

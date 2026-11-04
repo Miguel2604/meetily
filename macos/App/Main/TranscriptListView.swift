@@ -100,9 +100,9 @@ private final class TranscriptCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         time.font = Typography.timestamp
-        time.textColor = .meetyMutedForeground
+        time.textColor = .secondaryLabelColor
         source.font = Typography.caption
-        source.textColor = .meetyMutedForeground
+        source.textColor = .secondaryLabelColor
         text.font = Typography.body
         text.textColor = .labelColor
         text.isSelectable = true

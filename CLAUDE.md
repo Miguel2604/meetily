@@ -24,7 +24,7 @@ XcodeGen is at `~/.local/bin/xcodegen`; `Meety.xcodeproj` is generated, never ed
 macos/
   project.yml   Meety.app target: Info.plist keys, entitlements, main-actor-by-default, hardened runtime
   App/          AppKit UI built in code: AppDelegate, MainMenu, StatusItem, Notifier, AppModel,
-                Design/ (tokens, type, house views), Main/, Recording/, Meeting/, Settings/, Onboarding/
+                Design/ (type, house views), Main/, Recording/, Meeting/, Settings/, Onboarding/
   MeetyKit/     SwiftPM package, no AppKit
     Sources/Core/           GRDB Store, records, Settings (UserDefaults), Keychain, Paths, Download
     Sources/Audio/          devices, mic capture, system tap, DSP, ring buffer, mixer, RecordingWriter
@@ -36,7 +36,7 @@ macos/
 
 ## Conventions
 
-- **AppKit only, in code** (no SwiftUI, storyboards or XIBs). Reuse the house views in `App/Design/` (`NSButton.meety`, `CardView`, `EmptyStateView`, `NSColor.meety*`, `Typography`, `Metrics`).
+- **AppKit only, in code** (no SwiftUI, storyboards or XIBs). Reuse the house views in `App/Design/` (`NSButton.meety`, `CardView`, `EmptyStateView`, `Typography`, `Metrics`). Colors are system semantic colors plus the `AccentColor` asset; recording is `systemRed`. Liquid Glass goes on controls and chrome only, never behind transcript, summary or notes text (docs/LIQUID_GLASS_PLAN.md).
 - **State:** `AppModel` and the MeetyKit models are `@Observable`; views bind with `track { }` (in `AppModel.swift`), a `withObservationTracking` loop.
 - **Concurrency:** Swift 6 strict. The app target is main-actor by default; MeetyKit APIs are `nonisolated`, heavy work is `@concurrent`. Real-time audio callbacks never allocate, lock, log or touch actors: they write into the `Synchronization.Atomic` SPSC ring buffer (D7).
 - **Dependencies:** FluidAudio 0.18.2, GRDB, llama.cpp and whisper.cpp xcframeworks. Everything else comes from the SDK. Don't add packages.

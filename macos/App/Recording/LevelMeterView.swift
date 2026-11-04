@@ -32,8 +32,8 @@ final class LevelMeterView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.meetyMuted.cgColor
-        fill.backgroundColor = NSColor.meetySignal.cgColor
+        layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
+        fill.backgroundColor = NSColor.controlAccentColor.cgColor
     }
 
     /// RMS on a −60…0 dBFS scale.
