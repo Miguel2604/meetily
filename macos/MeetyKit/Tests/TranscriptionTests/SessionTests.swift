@@ -242,3 +242,25 @@ struct SessionPerformanceTests {
         return Double(info.phys_footprint) / 1_048_576
     }
 }
+
+/// The app's capture path end to end: live microphone + system tap → session → file (MEETY_REAL_DEVICES=1).
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_DEVICES"] == "1"))
+struct RealCaptureSessionTests {
+    @Test func `a recording is as long as the time it ran`() async throws {
+        let folder = tempDir().appending(path: "RealCapture")
+        let microphone = try LiveMicrophone(preferred: nil) // the app's order: microphone (voice processing) first
+        let system = SystemAudioCapture()
+        try system.start()
+        let session = try RecordingSession(title: "RealCapture", folder: folder, store: try tempStore(), engine: FakeEngine(),
+                                           detector: EnergyDetector(), microphone: microphone, system: system)
+        let start = Date()
+        await session.start()
+        try await Task.sleep(for: .seconds(6))
+        _ = try await session.stop()
+        let wall = Date().timeIntervalSince(start)
+        let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "metadata.json"))) as! [String: Any]
+        let recorded = try #require(metadata["duration_seconds"] as? Double)
+        #expect(abs(recorded - wall) < 1.0, "recorded \(recorded) s in \(wall) s")
+    }
+}
+

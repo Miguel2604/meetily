@@ -120,9 +120,13 @@ struct RealDeviceTests {
         let mic = MicrophoneCapture()
         try mic.start(device: nil, voiceProcessing: voiceProcessing)
         try await Task.sleep(for: .seconds(1))
+        _ = mic.drain() // start-up
+        let start = Date()
+        try await Task.sleep(for: .seconds(2))
         let samples = mic.drain()
+        let rate = Double(samples.count) / Date().timeIntervalSince(start)
         mic.stop()
-        #expect(samples.count > 40_000, "got \(samples.count) samples, dropped \(mic.droppedSamples)")
+        #expect(abs(rate - 48_000) < 4_800, "\(Int(rate)) samples/s, dropped \(mic.droppedSamples)") // real time, not just "enough"
     }
 }
 
@@ -137,11 +141,15 @@ struct RealSystemAudioTests {
         player.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
         player.arguments = [fixtures.appending(path: "he_aac_48k_5s.m4a").path]
         try player.run()
+        try await Task.sleep(for: .seconds(1))
+        _ = capture.drain() // start-up
+        let start = Date()
         try await Task.sleep(for: .seconds(2))
         let samples = capture.drain()
+        let rate = Double(samples.count) / Date().timeIntervalSince(start)
         player.terminate()
         capture.stop()
-        #expect(samples.count > 80_000)
+        #expect(abs(rate - 48_000) < 4_800, "\(Int(rate)) samples/s") // real time, not just "enough"
         #expect(AudioLevel(samples: samples).peak > 0.001)
     }
 }

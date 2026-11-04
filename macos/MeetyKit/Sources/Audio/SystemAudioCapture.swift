@@ -100,11 +100,13 @@ public final class SystemAudioCapture: @unchecked Sendable { // start/stop/drain
 
         let ring = RingBuffer(capacity: 1 << 18)
         pending.withUnsafeBufferPointer { if let base = $0.baseAddress { ring.write(base, count: pending.count) } }
-        let channels = Int(max(format.mChannelsPerFrame, 1))
         var proc: AudioDeviceIOProcID?
         try HAL.check(AudioDeviceCreateIOProcIDWithBlock(&proc, aggregateDevice, queue) { _, input, _, _, _ in
             let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
-            guard let buffer = buffers.first, let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { return }
+            // The tap's stream comes after the sub-device's inputs: while voice processing runs on the microphone, the
+            // output device shows a 6-channel input stream first, and reading that one recorded the wrong audio 6× too long.
+            guard let buffer = buffers.last, let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { return }
+            let channels = Int(max(buffer.mNumberChannels, 1))
             let frames = Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * channels)
             if channels == 1 {
                 ring.write(data, count: frames)
