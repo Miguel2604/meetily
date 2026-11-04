@@ -30,6 +30,13 @@ import Testing
             return "late"
         }
         #expect(slow == raw)
+        let start = ContinuousClock.now
+        let stubborn = await DictationCleanup.clean(raw, timeout: .milliseconds(50)) { _, _ in
+            await Task.detached { try? await Task.sleep(for: .seconds(1)) }.value // ignores cancellation
+            return "late"
+        }
+        #expect(stubborn == raw)
+        #expect(ContinuousClock.now - start < .milliseconds(500))
         let answer = await DictationCleanup.clean("what is the capital of france") { _, _ in
             "The capital of France is Paris. It has been the capital since the tenth century and is home to the Louvre."
         }

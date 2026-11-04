@@ -28,16 +28,23 @@ public enum DictationCleanup {
     /// The cleaned text, or `raw` when the model fails, takes longer than `timeout`, or returns something that isn't
     /// a cleanup of it.
     public static func clean(_ raw: String, timeout: Duration = .seconds(5), generate: @escaping Generate) async -> String {
-        let work = Task { try await generate(system, "<dictation>\(raw)</dictation>") }
+        // The first of the answer and the deadline wins; a late answer, from a backend still loading or ignoring
+        // cancellation, is dropped.
+        let (first, sink) = AsyncStream.makeStream(of: String?.self)
+        let work = Task {
+            do { sink.yield(accept(try await generate(system, "<dictation>\(raw)</dictation>"), raw: raw)) } catch {
+                // The type only: provider errors can echo the request, which is the dictated text.
+                log.warning("Dictation cleanup failed, pasting the transcript as heard: \(String(describing: type(of: error)), privacy: .public)")
+                sink.yield(nil)
+            }
+        }
         let timer = Task {
-            try await Task.sleep(for: timeout)
-            work.cancel() // every backend stops on cancel: URLSession, llama's flag, the Codex process, Foundation Models
+            try? await Task.sleep(for: timeout)
+            sink.yield(nil)
         }
-        defer { timer.cancel() }
-        do { return accept(try await work.value, raw: raw) ?? raw } catch {
-            log.warning("Dictation cleanup failed, pasting the transcript as heard: \(error, privacy: .public)")
-            return raw
-        }
+        defer { work.cancel(); timer.cancel(); sink.finish() }
+        for await output in first { return output ?? raw }
+        return raw
     }
 
     /// The output without echoed tags or quotes; nil when it's empty or much longer than the input (an answer, not
