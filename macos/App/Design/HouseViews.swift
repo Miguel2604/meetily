@@ -92,9 +92,18 @@ final class FormSection: CardView {
                 rule.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 14).isActive = true
                 rule.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -14).isActive = true
             }
-            let row = NSStackView(views: label.isEmpty ? [control] : [NSTextField(labelWithString: label), NSView(), control])
-            row.alignment = .centerY
-            row.edgeInsets = NSEdgeInsets(top: 9, left: 14, bottom: 9, right: 14)
+            let content = NSStackView(views: label.isEmpty ? [control] : [NSTextField(labelWithString: label), NSView(), control])
+            content.alignment = .centerY
+            // Required padding: stack view edge insets give way when a sheet or window sizes to fit.
+            let row = NSView()
+            content.translatesAutoresizingMaskIntoConstraints = false
+            row.addSubview(content)
+            NSLayoutConstraint.activate([
+                content.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+                content.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+                content.topAnchor.constraint(equalTo: row.topAnchor, constant: 9),
+                content.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -9),
+            ])
             stack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }

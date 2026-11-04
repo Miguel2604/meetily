@@ -263,16 +263,20 @@ extension MainWindowController: NSWindowDelegate {
         guard let content = window?.contentView else { return }
         content.subviews.first { $0.identifier == id }?.removeFromSuperview()
         guard show else { return }
-        let card = CardView()
-        card.identifier = id
-        card.fill = NSColor.windowBackgroundColor.withAlphaComponent(0.92)
-        card.stroke = .labelColor
         let icon = NSImageView(image: NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)!)
-        icon.symbolConfiguration = .init(pointSize: 32, weight: .light)
-        let stack = NSStackView(views: [icon, NSTextField.meety("Drop audio file to import", font: Typography.headline)])
+        icon.symbolConfiguration = .init(pointSize: 40, weight: .light)
+        icon.contentTintColor = .controlAccentColor
+        let stack = NSStackView(views: [icon, NSTextField.meety("Drop audio file to import", font: Typography.title)])
         stack.orientation = .vertical
+        stack.spacing = 12
+        let centered = NSView()
         stack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(stack)
+        centered.addSubview(stack)
+        stack.centerXAnchor.constraint(equalTo: centered.centerXAnchor).isActive = true
+        stack.centerYAnchor.constraint(equalTo: centered.centerYAnchor).isActive = true
+        let card = NSGlassEffectView(wrapping: centered, inset: NSEdgeInsets(), cornerRadius: 24)
+        card.identifier = id
+        card.tintColor = NSColor.controlAccentColor.withAlphaComponent(0.12)
         card.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(card)
         NSLayoutConstraint.activate([
@@ -280,8 +284,6 @@ extension MainWindowController: NSWindowDelegate {
             card.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             card.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
             card.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
-            stack.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: card.centerYAnchor),
         ])
     }
 }

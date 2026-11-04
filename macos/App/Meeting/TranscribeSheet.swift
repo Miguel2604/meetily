@@ -64,7 +64,7 @@ final class TranscribeSheet: NSViewController {
         progress.isHidden = true
         run.keyEquivalent = "\r"
         cancel.keyEquivalent = "\u{1b}"
-        var rows: [[NSView]] = [[NSTextField(labelWithString: "Language"), language], [NSTextField(labelWithString: "Model"), engine]]
+        var rows: [(String, NSView)] = [("Language", language), ("Model", engine)]
         let heading: String
         switch job {
         case .importFile(let url):
@@ -73,24 +73,21 @@ final class TranscribeSheet: NSViewController {
             titleField.stringValue = url.deletingPathExtension().lastPathComponent
             titleField.placeholderString = "Enter meeting title"
             titleField.widthAnchor.constraint(equalToConstant: 280).isActive = true
-            rows.insert([NSTextField(labelWithString: "Meeting title"), titleField], at: 0)
+            rows.insert(("Meeting title", titleField), at: 0)
             run.title = "Import"
         case .retranscribe:
             heading = "Retranscribe meeting"
             status.stringValue = "Re-process the audio with different language settings"
             run.title = "Retranscribe"
         }
-        let grid = NSGridView(views: rows)
-        grid.rowAlignment = .firstBaseline
-        grid.column(at: 0).xPlacement = .trailing
-        grid.rowSpacing = 10
+        let form = FormSection(rows: rows)
         let buttons = NSStackView(views: [NSView(), cancel, run])
-        let stack = NSStackView(views: [NSTextField.meety(heading, font: Typography.headline), status, grid, progress, buttons])
+        let stack = NSStackView(views: [NSTextField.meety(heading, font: Typography.headline), status, form, progress, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        for v in [progress, buttons, status] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true }
+        for v in [form, progress, buttons, status] as [NSView] { v.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true }
         stack.widthAnchor.constraint(equalToConstant: 440).isActive = true
         view = stack
     }

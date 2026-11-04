@@ -148,7 +148,7 @@ final class GeneralPane: SettingsPane {
                 note: "English uses Parakeet. Tagalog and other languages use Whisper. Auto-detect uses the model chosen under Transcription.")
         section("Recordings", [form([("Save recordings in", folderRow)])])
         section("Notifications", [
-            form([("Show", Self.checkbox("When recording starts and stops", settings.recordingNotifications, target: self, action: #selector(recordingNotices(_:)))),
+            form([("", Self.checkbox("When recording starts and stops", settings.recordingNotifications, target: self, action: #selector(recordingNotices(_:)))),
                   ("", Self.checkbox("When a summary is ready", settings.summaryNotifications, target: self, action: #selector(summaryNotices(_:))))]),
         ])
         track { [weak self] in
