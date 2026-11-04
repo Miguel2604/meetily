@@ -59,7 +59,7 @@ final class SummaryPane: SettingsPane {
         maxTokens.placeholderString = "Optional"
         temperature.placeholderString = "0.0 – 2.0"
         topP.placeholderString = "0.0 – 1.0"
-        pullName.placeholderString = "e.g. gemma3:1b"
+        pullName.placeholderString = "e.g. gemma4:e2b"
         pullProgress.style = .bar
         pullProgress.controlSize = .small
         pullProgress.isHidden = true

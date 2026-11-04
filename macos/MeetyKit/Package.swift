@@ -24,11 +24,11 @@ let package = Package(
             url: "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-b5454-xcframework.zip",
             checksum: "e57f8c48933000acabc13bb913fbe82805d483a2deff692cc6738836bd92393b"),
         .target(name: "Summary", dependencies: ["Core", "llama"], resources: [.copy("Resources/templates")]),
-        // llama.cpp b11500 (Oct 2026): Metal, and the qwen35 architecture the default built-in model needs.
+        // llama.cpp b12091 (Nov 2026): Metal, and the qwen35, gemma4 and lfm3 architectures of the built-in models.
         .binaryTarget(
             name: "llama",
-            url: "https://github.com/ggml-org/llama.cpp/releases/download/b11500/llama-b11500-xcframework.zip",
-            checksum: "81256a861c8dd81d83efba4ffef02af93820678b65c947177507c0b2717625cb"),
+            url: "https://github.com/ggml-org/llama.cpp/releases/download/b12091/llama-b12091-xcframework.zip",
+            checksum: "54ccbe9e59db8c64d18240cc04068bb510af3e4e7d39a074dd92de554541a8fa"),
         .testTarget(name: "CoreTests", dependencies: ["Core"]),
         .testTarget(name: "AudioTests", dependencies: ["Audio"]),
         .testTarget(name: "TranscriptionTests", dependencies: ["Transcription"]),

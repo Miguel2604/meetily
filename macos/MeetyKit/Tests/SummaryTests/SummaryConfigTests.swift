@@ -75,7 +75,7 @@ import Testing
     }
 
     @Test func `built-in and ChatGPT need no key`() throws {
-        try SummaryConfig(provider: .builtin, model: "gemma3:1b").validate()
+        try SummaryConfig(provider: .builtin, model: "gemma4:e2b").validate()
         try SummaryConfig(provider: .chatgpt, model: "gpt-6-astra").validate()
     }
 }

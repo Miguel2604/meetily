@@ -18,8 +18,13 @@ public struct Sampling: Sendable, Hashable {
         Sampling(temperature: 0.5, topK: 20, topP: 0.8, presencePenalty: 0.3, frequencyPenalty: 0, repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: stop)
     }
 
-    public static func gemma3Instruct(stop: [String]) -> Sampling {
+    public static func gemmaInstruct(stop: [String]) -> Sampling {
         Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0, repeatPenalty: 1, penaltyLastN: 0, stopTokens: stop)
+    }
+
+    /// Liquid's general-purpose settings from the LFM3 model card.
+    public static func lfm3(stop: [String]) -> Sampling {
+        Sampling(temperature: 0.1, topK: 50, topP: 1, presencePenalty: 0, frequencyPenalty: 0, repeatPenalty: 1.1, penaltyLastN: 256, stopTokens: stop)
     }
 
     /// Non-finite or out-of-range values fall back to neutral ones; a zero top-k stays (it disables top-k).
@@ -60,14 +65,18 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
                      url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")!,
                      sizeMB: 2614, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
                      description: "High-quality Qwen 3.5 model for built-in summaries. Best local Qwen option in the current lineup."),
-        BuiltInModel(name: "gemma3:4b", displayName: "Gemma 3 4B (Balanced)", file: "gemma-3-4b-it-Q4_K_M.gguf", template: "gemma3",
-                     url: URL(string: "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf")!,
-                     sizeMB: 2374, contextSize: 32768, sampling: .gemma3Instruct(stop: ["<end_of_turn>"]),
-                     description: "Balanced model. Great quality/speed trade-off. Requires ~3.5GB RAM."),
-        BuiltInModel(name: "gemma3:1b", displayName: "Gemma 3 1B (Fast)", file: "gemma-3-1b-it-Q8_0.gguf", template: "gemma3",
-                     url: URL(string: "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q8_0.gguf")!,
-                     sizeMB: 1019, contextSize: 32768, sampling: .gemma3Instruct(stop: ["<end_of_turn>"]),
-                     description: "Fastest model. Runs on any hardware with ~1GB RAM. Good for quick summaries."),
+        BuiltInModel(name: "gemma4:e2b", displayName: "Gemma 4 E2B (Balanced)", file: "gemma-4-E2B-it-Q4_K_M.gguf", template: "gemma4",
+                     url: URL(string: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf")!,
+                     sizeMB: 2963, contextSize: 32768, sampling: .gemmaInstruct(stop: ["<turn|>"]),
+                     description: "Google's Gemma 4 with 2B effective parameters. Good multilingual summaries. Requires ~4GB RAM."),
+        BuiltInModel(name: "gemma4:e4b", displayName: "Gemma 4 E4B (High Quality)", file: "gemma-4-E4B-it-Q4_K_M.gguf", template: "gemma4",
+                     url: URL(string: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")!,
+                     sizeMB: 4747, contextSize: 32768, sampling: .gemmaInstruct(stop: ["<turn|>"]),
+                     description: "Gemma 4 with 4B effective parameters. Strong on long transcripts. Requires ~6GB RAM."),
+        BuiltInModel(name: "lfm3:1.7b", displayName: "LFM3 1.7B (Fast)", file: "LFM3-1.7B-Q4_K_M.gguf", template: "lfm3_nonthinking",
+                     url: URL(string: "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf")!,
+                     sizeMB: 1049, contextSize: 32768, sampling: .lfm3(stop: ["<|im_end|>"]),
+                     description: "Liquid AI's LFM3, the fastest option. Runs on any Mac with ~2GB RAM. Good for quick summaries."),
     ]
 
     public static func named(_ name: String) -> BuiltInModel? { catalog.first { $0.name == name } }
@@ -77,9 +86,9 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
         named(ramGB >= 14 ? "qwen3.5:4b" : "qwen3.5:2b")!
     }
 
-    /// The best of the downloaded models (`summary_model_priority`): Qwen before Gemma, larger first.
+    /// The best of the downloaded models (`summary_model_priority`): Qwen, then Gemma 4, then LFM3, larger first.
     public static func best(of names: [String]) -> BuiltInModel? {
-        let priority = ["gemma3:1b", "gemma3:4b", "qwen3.5:2b", "qwen3.5:4b"]
+        let priority = ["lfm3:1.7b", "gemma4:e2b", "gemma4:e4b", "qwen3.5:2b", "qwen3.5:4b"]
         return names.filter(priority.contains).max { priority.firstIndex(of: $0)! < priority.firstIndex(of: $1)! }.flatMap(named)
     }
 }
@@ -108,15 +117,20 @@ public enum BuiltInError: Error, Equatable, CustomStringConvertible, LocalizedEr
 
 /// Fills the model's chat template; control markers in the user text are defused so it cannot close its own turn.
 func formatPrompt(template: String, system: String, user: String) throws(BuiltInError) -> String {
-    let markers = ["<|im_start|>": "< |im_start| >", "<|im_end|>": "< |im_end| >", "<start_of_turn>": "< start_of_turn >",
-                   "<end_of_turn>": "< end_of_turn >", "<think>": "< think >", "</think>": "< /think >"]
+    let markers = ["<|im_start|>": "< |im_start| >", "<|im_end|>": "< |im_end| >", "<|turn>": "< |turn >", "<turn|>": "< turn| >",
+                   "<|think|>": "< |think| >", "<|channel>": "< |channel >", "<channel|>": "< channel| >",
+                   "<think>": "< think >", "</think>": "< /think >"]
     let escaped = markers.reduce(user) { $0.replacing($1.key, with: $1.value) }
     switch template {
-    case "gemma3":
-        return "<start_of_turn>user\n\(system)<end_of_turn>\n<start_of_turn>user\n\(escaped)<end_of_turn>\n<start_of_turn>model\n"
+    case "gemma4":
+        // No <|think|> in the system turn keeps thinking off; E2B/E4B then answer without an empty thought block.
+        return "<|turn>system\n\(system)<turn|>\n<|turn>user\n\(escaped)<turn|>\n<|turn>model\n"
     case "qwen3.5_nonthinking":
         // An empty think block starts the answer in direct-response mode.
         return "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(escaped)<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    case "lfm3_nonthinking":
+        // The model card's enable_thinking=false: an empty think block opens the answer.
+        return "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(escaped)<|im_end|>\n<|im_start|>assistant\n<think></think>"
     default:
         throw .unknownTemplate(template)
     }

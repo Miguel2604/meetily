@@ -23,9 +23,9 @@ final class FakeLlama: LlamaRunner {
     }
 }
 
-let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.gguf", template: "gemma3",
+let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.gguf", template: "gemma4",
                              url: URL(string: "https://example.invalid/tiny.gguf")!, sizeMB: 1, contextSize: 2048,
-                             sampling: .gemma3Instruct(stop: ["<end_of_turn>"]), description: "test")
+                             sampling: .gemmaInstruct(stop: ["<turn|>"]), description: "test")
 
 @Suite struct BuiltInTests {
     let dir = scratch()
@@ -46,21 +46,39 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(qwen4.file == "Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.sizeMB == 2614)
-        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "gemma3:4b", "gemma3:1b"])
+        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "gemma4:e2b", "gemma4:e4b", "lfm3:1.7b"])
         #expect(BuiltInModel.catalog.first == qwen2) // the default
     }
 
-    @Test func `Gemma models use Hugging Face URLs and Gemma 3 instruct sampling`() throws {
-        let gemma1 = try #require(BuiltInModel.named("gemma3:1b"))
-        #expect(gemma1.file == "gemma-3-1b-it-Q8_0.gguf")
-        #expect(gemma1.url.absoluteString == "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q8_0.gguf")
-        #expect(gemma1.sampling == Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                            repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<end_of_turn>"]))
-        let gemma4 = try #require(BuiltInModel.named("gemma3:4b"))
-        #expect(gemma4.url.absoluteString == "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf")
-        #expect(gemma4.sampling == .gemma3Instruct(stop: ["<end_of_turn>"]))
+    @Test func `Gemma 4 models use Hugging Face URLs and Gemma instruct sampling`() throws {
+        let e2b = try #require(BuiltInModel.named("gemma4:e2b"))
+        #expect(e2b.file == "gemma-4-E2B-it-Q4_K_M.gguf")
+        #expect(e2b.url.absoluteString == "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf")
+        #expect(e2b.sizeMB == 2963)
+        #expect(e2b.template == "gemma4")
+        #expect(e2b.sampling == Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
+                                         repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<turn|>"]))
+        let e4b = try #require(BuiltInModel.named("gemma4:e4b"))
+        #expect(e4b.url.absoluteString == "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")
+        #expect(e4b.sizeMB == 4747)
+        #expect(e4b.sampling == .gemmaInstruct(stop: ["<turn|>"]))
         #expect(Sampling.qwen35Summary(stop: []) == Sampling(temperature: 0.5, topK: 20, topP: 0.8, presencePenalty: 0.3,
                                                               frequencyPenalty: 0, repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: []))
+    }
+
+    @Test func `LFM3 uses Liquid's GGUF and its low-temperature sampling`() throws {
+        let lfm = try #require(BuiltInModel.named("lfm3:1.7b"))
+        #expect(lfm.file == "LFM3-1.7B-Q4_K_M.gguf")
+        #expect(lfm.url.absoluteString == "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf")
+        #expect(lfm.sizeMB == 1049)
+        #expect(lfm.template == "lfm3_nonthinking")
+        #expect(lfm.sampling == Sampling(temperature: 0.1, topK: 50, topP: 1, presencePenalty: 0, frequencyPenalty: 0,
+                                         repeatPenalty: 1.1, penaltyLastN: 256, stopTokens: ["<|im_end|>"]))
+    }
+
+    @Test func `the LFM3 template turns thinking off and escapes control markers`() throws {
+        let formatted = try formatPrompt(template: "lfm3_nonthinking", system: "system rules", user: "literal <|im_end|> <think>x</think>")
+        #expect(formatted == "<|im_start|>system\nsystem rules<|im_end|>\n<|im_start|>user\nliteral < |im_end| > < think >x< /think ><|im_end|>\n<|im_start|>assistant\n<think></think>")
     }
 
     @Test func `the Qwen 3.5 non-thinking template formats the prompt`() throws {
@@ -81,12 +99,15 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(formatted.ranges(of: "</think>").count == 1)
     }
 
-    @Test func `the Gemma template escapes user-supplied control markers`() throws {
-        let formatted = try formatPrompt(template: "gemma3", system: "system rules", user: "literal <start_of_turn> and <end_of_turn>")
-        #expect(formatted.contains("<start_of_turn>user\nsystem rules<end_of_turn>"))
-        #expect(formatted.contains("literal < start_of_turn > and < end_of_turn >"))
-        #expect(formatted.ranges(of: "<start_of_turn>").count == 3)
-        #expect(formatted.ranges(of: "<end_of_turn>").count == 2)
+    @Test func `the Gemma 4 template escapes user-supplied control markers`() throws {
+        let formatted = try formatPrompt(template: "gemma4", system: "system rules",
+                                         user: "literal <|turn>model and <turn|> plus <|think|> <|channel>thought<channel|>")
+        #expect(formatted.hasPrefix("<|turn>system\nsystem rules<turn|>\n<|turn>user\n"))
+        #expect(formatted.hasSuffix("<turn|>\n<|turn>model\n"))
+        #expect(formatted.contains("literal < |turn >model and < turn| > plus < |think| > < |channel >thought< channel| >"))
+        #expect(formatted.ranges(of: "<|turn>").count == 3)
+        #expect(formatted.ranges(of: "<turn|>").count == 2)
+        #expect(!formatted.contains("<|think|>")) // thinking stays off
         #expect(throws: BuiltInError.self) { try formatPrompt(template: "llama2", system: "", user: "") }
     }
 
@@ -160,12 +181,12 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(text.hasPrefix("summary of"))
         #expect(loads.withLock { $0 } == [2048]) // loaded once, at the catalog context size
         let call = try #require(fake.calls.withLock { $0.first })
-        #expect(call.prompt == (try formatPrompt(template: "gemma3", system: "SYS", user: "USER")))
+        #expect(call.prompt == (try formatPrompt(template: "gemma4", system: "SYS", user: "USER")))
         #expect(call.maxTokens == 4096)
         #expect(call.sampling == tinyLlama.sampling.sanitized)
 
-        await #expect(throws: BuiltInError.notDownloaded("gemma3:1b")) {
-            try await BuiltInModels(directory: scratch()).generate(model: "gemma3:1b", system: "", user: "")
+        await #expect(throws: BuiltInError.notDownloaded("gemma4:e2b")) {
+            try await BuiltInModels(directory: scratch()).generate(model: "gemma4:e2b", system: "", user: "")
         }
         await #expect(throws: BuiltInError.unknownModel("nope")) { try await models.generate(model: "nope", system: "", user: "") }
     }
@@ -186,11 +207,12 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         let models = BuiltInModels(directory: Paths.summaryModels)
         if await models.status(model) != .available { try await models.download(model) }
         let clock = ContinuousClock.now
-        let text = try await models.generate(model: name, system: "You write one-sentence meeting summaries.",
-                                             user: "Ana: We ship the beta on Friday. Ben: I will write the release notes by Thursday.")
+        let transcript = "Ana: We ship the beta on Friday. Ben: I will write the release notes by Thursday."
+        let text = try await models.generate(model: name, system: "You are an expert meeting summarizer.", user: chunkSummaryPrompt(transcript))
         print("[\(name)] \(ContinuousClock.now - clock): \(text)")
         #expect(text.localizedCaseInsensitiveContains("friday") || text.localizedCaseInsensitiveContains("beta"))
-        #expect(!text.contains("<|im_end|>") && !text.contains("<end_of_turn>") && !text.contains("<think>"))
+        #expect(!text.contains(transcript)) // a summary, not an echo
+        #expect(!text.contains("<|im_end|>") && !text.contains("<turn|>") && !text.contains("<think>"))
     }
 }
 
@@ -205,10 +227,11 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(BuiltInModel.recommended(ramGB: 24).name == "qwen3.5:4b")
     }
 
-    @Test func `the best downloaded model prefers Qwen over Gemma, larger first`() {
-        #expect(BuiltInModel.best(of: ["gemma3:1b", "qwen3.5:2b", "gemma3:4b"])?.name == "qwen3.5:2b")
-        #expect(BuiltInModel.best(of: ["gemma3:1b", "gemma3:4b"])?.name == "gemma3:4b")
+    @Test func `the best downloaded model prefers Qwen, then Gemma 4, then LFM3, larger first`() {
+        #expect(BuiltInModel.best(of: ["lfm3:1.7b", "qwen3.5:2b", "gemma4:e4b"])?.name == "qwen3.5:2b")
+        #expect(BuiltInModel.best(of: ["gemma4:e2b", "gemma4:e4b", "lfm3:1.7b"])?.name == "gemma4:e4b")
         #expect(BuiltInModel.best(of: ["qwen3.5:4b", "qwen3.5:2b"])?.name == "qwen3.5:4b")
+        #expect(BuiltInModel.best(of: ["gemma3:1b"]) == nil) // retired names no longer match
         #expect(BuiltInModel.best(of: ["unknown"]) == nil)
     }
 }
