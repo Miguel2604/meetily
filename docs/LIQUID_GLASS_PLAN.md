@@ -150,7 +150,7 @@ Each slice: build, launch it in a scratch data dir (CLAUDE.md, Data safety), tak
 
 ## Status (2026-11-04)
 
-G0–G5 and G7–G12 shipped and G14's cleanup is done; G6 was dropped and G13 waits for a yes. Each slice is its own commit on `redesign/liquid-glass`. `scripts/test.sh` is green: the MeetyKit suites pass, including two new autosave tests, and the app builds. Snapshots: [docs/redesign/](redesign/).
+G0–G5 and G7–G12 shipped and G14's cleanup is done; G6 was dropped. G13 shipped after the merge: `App/AppIcon.icon` is written by hand (icon.json plus two SVG layers) instead of in Icon Composer, and the build compiles it. Each slice is its own commit on `redesign/liquid-glass`. `scripts/test.sh` is green: the MeetyKit suites pass, including two new autosave tests, and the app builds. Snapshots: [docs/redesign/](redesign/).
 
 | Home | Recording | Meeting |
 |---|---|---|
