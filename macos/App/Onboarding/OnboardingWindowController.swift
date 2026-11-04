@@ -85,6 +85,7 @@ final class OnboardingViewController: NSViewController {
         self.step = step
         timer?.invalidate()
         content.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        content.alignment = step == .welcome ? .centerX : .leading
         permissionRows = []
         stepLabel.stringValue = "Step \(step.rawValue + 1) of \(Step.allCases.count)"
         back.isHidden = step == .welcome
@@ -97,9 +98,13 @@ final class OnboardingViewController: NSViewController {
     }
 
     private func heading(_ title: String, _ subtitle: String) {
-        add(NSTextField.meety(title, font: NSFont.systemFont(ofSize: 24, weight: .semibold)))
-        let sub = NSTextField.meety(subtitle, font: Typography.body, color: .secondaryLabelColor)
-        add(sub)
+        let centered = step == .welcome
+        let head = NSTextField.meety(title, font: Typography.largeTitle)
+        let sub = NSTextField.meety(subtitle, font: NSFont.preferredFont(forTextStyle: .title3), color: .secondaryLabelColor)
+        for label in [head, sub] {
+            label.alignment = centered ? .center : .natural
+            add(label)
+        }
         content.setCustomSpacing(24, after: sub)
     }
 
@@ -108,25 +113,37 @@ final class OnboardingViewController: NSViewController {
         view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
     }
 
+    /// Centered, in the style of Apple's welcome sheets: the mark, a title, and features with tinted symbols.
     private func showWelcome() {
         let mark = MeetyMarkView()
         mark.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 64), mark.heightAnchor.constraint(equalToConstant: 64)])
+        NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 80), mark.heightAnchor.constraint(equalToConstant: 80)])
         content.addArrangedSubview(mark)
         content.setCustomSpacing(20, after: mark)
-        heading("Welcome to Meety", "Record. Transcribe. Summarize. All on your device.")
-        for (symbol, text) in [("lock", "Your data never leaves your device"), ("text.badge.checkmark", "Notes and action items written for you"),
-                               ("wifi.slash", "Works offline, no cloud required")] {
+        heading("Welcome to Meety", "Record. Transcribe. Summarize. All on your Mac.")
+        let features = NSStackView()
+        features.orientation = .vertical
+        features.alignment = .leading
+        features.spacing = 18
+        for (symbol, title, detail) in [("lock.shield", "Private by design", "Audio, transcripts and notes stay on this Mac."),
+                                        ("text.badge.checkmark", "Notes written for you", "Summaries with decisions and action items after every call."),
+                                        ("wifi.slash", "Works offline", "No account and no cloud required.")] {
             let icon = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!)
-            icon.contentTintColor = .secondaryLabelColor
-            icon.widthAnchor.constraint(equalToConstant: 22).isActive = true
-            let row = NSStackView(views: [icon, NSTextField.meety(text, font: Typography.body)])
-            row.spacing = 10
-            content.addArrangedSubview(row)
+            icon.symbolConfiguration = .init(pointSize: 24, weight: .regular)
+            icon.contentTintColor = .controlAccentColor
+            icon.widthAnchor.constraint(equalToConstant: 40).isActive = true
+            let text = NSStackView(views: [NSTextField.meety(title, font: Typography.headline),
+                                           NSTextField.meety(detail, font: Typography.body, color: .secondaryLabelColor)])
+            text.orientation = .vertical
+            text.alignment = .leading
+            text.spacing = 2
+            let row = NSStackView(views: [icon, text])
+            row.spacing = 12
+            features.addArrangedSubview(row)
         }
-        let time = NSTextField.meety("Takes less than 3 minutes", font: Typography.callout, color: .secondaryLabelColor)
-        content.addArrangedSubview(time)
-        content.setCustomSpacing(24, after: content.arrangedSubviews[content.arrangedSubviews.count - 2])
+        content.addArrangedSubview(features)
+        content.setCustomSpacing(28, after: features)
+        content.addArrangedSubview(NSTextField.meety("Takes less than 3 minutes", font: Typography.callout, color: .secondaryLabelColor))
         next.title = "Get Started"
         next.isEnabled = true
     }
@@ -140,13 +157,15 @@ final class OnboardingViewController: NSViewController {
             icon.contentTintColor = .labelColor
             icon.widthAnchor.constraint(equalToConstant: 28).isActive = true
             let detail = NSTextField.meety(permission.detail, font: Typography.callout, color: .secondaryLabelColor)
-            detail.preferredMaxLayoutWidth = 320
-            detail.widthAnchor.constraint(equalToConstant: 320).isActive = true
+            detail.preferredMaxLayoutWidth = 280
             let text = NSStackView(views: [NSTextField.meety(permission.title, font: Typography.bodyMedium), detail])
             text.orientation = .vertical
             text.alignment = .leading
             text.spacing = 2
-            let status = NSTextField.meety("Checking…", font: Typography.callout, color: .secondaryLabelColor)
+            let status = NSTextField(labelWithString: "Checking…")
+            status.font = Typography.callout
+            status.textColor = .secondaryLabelColor
+            status.setContentCompressionResistancePriority(.required, for: .horizontal)
             let button = NSButton.meety("Enable", target: self, action: #selector(requestPermission(_:)))
             button.controlSize = .regular
             button.tag = Permission.allCases.firstIndex(of: permission)!

@@ -23,7 +23,6 @@ final class ModelRowView: CardView {
         progress.minValue = 0
         progress.maxValue = 1
         primary.controlSize = .regular
-        delete.controlSize = .regular
         delete.toolTip = "Delete the model to free up space"
 
         let heading = NSStackView(views: [title, size])
