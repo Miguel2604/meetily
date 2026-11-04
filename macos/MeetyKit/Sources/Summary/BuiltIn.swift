@@ -22,11 +22,6 @@ public struct Sampling: Sendable, Hashable {
         Sampling(temperature: 1, topK: 64, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0, repeatPenalty: 1, penaltyLastN: 0, stopTokens: stop)
     }
 
-    /// Liquid's general-purpose settings from the LFM3 model card.
-    public static func lfm3(stop: [String]) -> Sampling {
-        Sampling(temperature: 0.1, topK: 50, topP: 1, presencePenalty: 0, frequencyPenalty: 0, repeatPenalty: 1.1, penaltyLastN: 256, stopTokens: stop)
-    }
-
     /// Non-finite or out-of-range values fall back to neutral ones; a zero top-k stays (it disables top-k).
     var sanitized: Sampling {
         func finite(_ value: Float, _ fallback: Float) -> Float { value.isFinite ? value : fallback }
@@ -57,14 +52,14 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
     public var id: String { name }
 
     public static let catalog = [
-        BuiltInModel(name: "qwen3.5:2b", displayName: "Qwen 3.5 2B (Balanced)", file: "Qwen3.5-2B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
+        BuiltInModel(name: "qwen3.5:2b", displayName: "Qwen 3.5 2B (Fast)", file: "Qwen3.5-2B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
                      url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf")!,
                      sizeMB: 1221, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
-                     description: "Balanced Qwen 3.5 model for built-in summaries. Higher quality with modest local requirements."),
+                     description: "The smallest and fastest built-in model. Quick summaries; can miss who owns what. Requires ~2GB RAM."),
         BuiltInModel(name: "qwen3.5:4b", displayName: "Qwen 3.5 4B (High Quality)", file: "Qwen3.5-4B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
                      url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")!,
                      sizeMB: 2614, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
-                     description: "High-quality Qwen 3.5 model for built-in summaries. Best local Qwen option in the current lineup."),
+                     description: "High-quality summaries at a good speed. Recommended for Macs with 16GB. Requires ~4GB RAM."),
         BuiltInModel(name: "qwen3.5:9b", displayName: "Qwen 3.5 9B (Best Quality)", file: "Qwen3.5-9B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
                      url: URL(string: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf")!,
                      sizeMB: 5417, contextSize: 32768, sampling: .qwen35Summary(stop: ["<|im_end|>"]),
@@ -76,36 +71,19 @@ public struct BuiltInModel: Sendable, Hashable, Identifiable {
         BuiltInModel(name: "gemma4:e4b", displayName: "Gemma 4 E4B (High Quality)", file: "gemma-4-E4B-it-Q4_K_M.gguf", template: "gemma4",
                      url: URL(string: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf")!,
                      sizeMB: 4747, contextSize: 32768, sampling: .gemmaInstruct(stop: ["<turn|>"]),
-                     description: "Gemma 4 with 4B effective parameters. Strong on long transcripts. Requires ~6GB RAM."),
-        // MiniCPM5 and Granite 4.2 use ChatML with the same empty think blocks as Qwen 3.5 and LFM3.
-        BuiltInModel(name: "minicpm5:2b", displayName: "MiniCPM5 2B (Long Meetings)", file: "MiniCPM5-2B-Q4_K_M.gguf", template: "qwen3.5_nonthinking",
-                     url: URL(string: "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf")!,
-                     sizeMB: 1489, contextSize: 32768,
-                     sampling: Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                        repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: ["<|im_end|>"]),
-                     description: "OpenBMB's MiniCPM5, strong on long transcripts for its size. Requires ~2.5GB RAM."),
-        BuiltInModel(name: "granite4.2:3b", displayName: "Granite 4.2 3B (Balanced)", file: "granite-4.2-3b-Q4_K_M.gguf", template: "lfm3_nonthinking",
-                     url: URL(string: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf")!,
-                     sizeMB: 2140, contextSize: 32768,
-                     sampling: Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                        repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<|im_end|>"]),
-                     description: "IBM's Granite 4.2, precise at following instructions in 12 languages. Requires ~3.5GB RAM."),
-        BuiltInModel(name: "lfm3:1.7b", displayName: "LFM3 1.7B (Fast)", file: "LFM3-1.7B-Q4_K_M.gguf", template: "lfm3_nonthinking",
-                     url: URL(string: "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf")!,
-                     sizeMB: 1049, contextSize: 32768, sampling: .lfm3(stop: ["<|im_end|>"]),
-                     description: "Liquid AI's LFM3, the fastest option. Runs on any Mac with ~2GB RAM. Good for quick summaries."),
+                     description: "Gemma 4 with 4B effective parameters. Most accurate in testing. Requires ~7GB RAM."),
     ]
 
     public static func named(_ name: String) -> BuiltInModel? { catalog.first { $0.name == name } }
 
-    /// The onboarding pick for this Mac (`recommend_summary_model`): Qwen 3.5 4B from 14 GB of RAM, else 2B.
+    /// The onboarding pick for this Mac, from the Nov 2026 bake-off: Qwen 3.5 9B from 24 GB, 4B from 14 GB, else Gemma 4 E2B.
     public static func recommended(ramGB: UInt64 = ProcessInfo.processInfo.physicalMemory >> 30) -> BuiltInModel {
-        named(ramGB >= 14 ? "qwen3.5:4b" : "qwen3.5:2b")!
+        named(ramGB >= 24 ? "qwen3.5:9b" : ramGB >= 14 ? "qwen3.5:4b" : "gemma4:e2b")!
     }
 
-    /// The best of the downloaded models (`summary_model_priority`): Qwen, then Gemma 4, then LFM3, larger first.
+    /// The best of the downloaded models (`summary_model_priority`), in bake-off order, worst first.
     public static func best(of names: [String]) -> BuiltInModel? {
-        let priority = ["lfm3:1.7b", "minicpm5:2b", "granite4.2:3b", "gemma4:e2b", "gemma4:e4b", "qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b"]
+        let priority = ["qwen3.5:2b", "gemma4:e2b", "qwen3.5:4b", "gemma4:e4b", "qwen3.5:9b"]
         return names.filter(priority.contains).max { priority.firstIndex(of: $0)! < priority.firstIndex(of: $1)! }.flatMap(named)
     }
 }
@@ -145,9 +123,6 @@ func formatPrompt(template: String, system: String, user: String) throws(BuiltIn
     case "qwen3.5_nonthinking":
         // An empty think block starts the answer in direct-response mode.
         return "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(escaped)<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
-    case "lfm3_nonthinking":
-        // The model card's enable_thinking=false: an empty think block opens the answer.
-        return "<|im_start|>system\n\(system)<|im_end|>\n<|im_start|>user\n\(escaped)<|im_end|>\n<|im_start|>assistant\n<think></think>"
     default:
         throw .unknownTemplate(template)
     }

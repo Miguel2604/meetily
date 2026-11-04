@@ -34,7 +34,7 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
 
     @Test func `Qwen 3.5 models are registered with the expected metadata`() throws {
         let qwen2 = try #require(BuiltInModel.named("qwen3.5:2b"))
-        #expect(qwen2.displayName == "Qwen 3.5 2B (Balanced)")
+        #expect(qwen2.displayName == "Qwen 3.5 2B (Fast)")
         #expect(qwen2.file == "Qwen3.5-2B-Q4_K_M.gguf")
         #expect(qwen2.template == "qwen3.5_nonthinking")
         #expect(qwen2.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf")
@@ -46,13 +46,11 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(qwen4.file == "Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.sizeMB == 2614)
-        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b", "gemma4:e2b", "gemma4:e4b",
-                                                      "minicpm5:2b", "granite4.2:3b", "lfm3:1.7b"])
+        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b", "gemma4:e2b", "gemma4:e4b"])
         let qwen9 = try #require(BuiltInModel.named("qwen3.5:9b"))
         #expect(qwen9.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf")
         #expect(qwen9.sizeMB == 5417)
         #expect(qwen9.template == "qwen3.5_nonthinking" && qwen9.sampling == qwen2.sampling)
-        #expect(BuiltInModel.catalog.first == qwen2) // the default
     }
 
     @Test func `Gemma 4 models use Hugging Face URLs and Gemma instruct sampling`() throws {
@@ -69,36 +67,6 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(e4b.sampling == .gemmaInstruct(stop: ["<turn|>"]))
         #expect(Sampling.qwen35Summary(stop: []) == Sampling(temperature: 0.5, topK: 20, topP: 0.8, presencePenalty: 0.3,
                                                               frequencyPenalty: 0, repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: []))
-    }
-
-    @Test func `LFM3 uses Liquid's GGUF and its low-temperature sampling`() throws {
-        let lfm = try #require(BuiltInModel.named("lfm3:1.7b"))
-        #expect(lfm.file == "LFM3-1.7B-Q4_K_M.gguf")
-        #expect(lfm.url.absoluteString == "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf")
-        #expect(lfm.sizeMB == 1049)
-        #expect(lfm.template == "lfm3_nonthinking")
-        #expect(lfm.sampling == Sampling(temperature: 0.1, topK: 50, topP: 1, presencePenalty: 0, frequencyPenalty: 0,
-                                         repeatPenalty: 1.1, penaltyLastN: 256, stopTokens: ["<|im_end|>"]))
-    }
-
-    @Test func `MiniCPM5 and Granite 4.2 use their official GGUFs and model-card sampling`() throws {
-        let minicpm = try #require(BuiltInModel.named("minicpm5:2b"))
-        #expect(minicpm.url.absoluteString == "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf")
-        #expect(minicpm.sizeMB == 1489)
-        #expect(minicpm.template == "qwen3.5_nonthinking") // same ChatML and empty think block
-        #expect(minicpm.sampling == Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                             repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: ["<|im_end|>"]))
-        let granite = try #require(BuiltInModel.named("granite4.2:3b"))
-        #expect(granite.url.absoluteString == "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf")
-        #expect(granite.sizeMB == 2140)
-        #expect(granite.template == "lfm3_nonthinking") // same ChatML and <think></think>
-        #expect(granite.sampling == Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
-                                             repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<|im_end|>"]))
-    }
-
-    @Test func `the LFM3 template turns thinking off and escapes control markers`() throws {
-        let formatted = try formatPrompt(template: "lfm3_nonthinking", system: "system rules", user: "literal <|im_end|> <think>x</think>")
-        #expect(formatted == "<|im_start|>system\nsystem rules<|im_end|>\n<|im_start|>user\nliteral < |im_end| > < think >x< /think ><|im_end|>\n<|im_start|>assistant\n<think></think>")
     }
 
     @Test func `the Qwen 3.5 non-thinking template formats the prompt`() throws {
@@ -238,20 +206,25 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
 
 /// Port of the `commands.rs` recommendation tests.
 @Suite struct RecommendedModelTests {
-    @Test func `below the 14 GB floor it recommends Qwen 3.5 2B`() {
-        #expect(BuiltInModel.recommended(ramGB: 13).name == "qwen3.5:2b")
+    // Floors from the Nov 2026 bake-off: Gemma 4 E2B beat Qwen 3.5 2B on accuracy; 9B was best overall on 24 GB.
+    @Test func `below 14 GB it recommends Gemma 4 E2B`() {
+        #expect(BuiltInModel.recommended(ramGB: 8).name == "gemma4:e2b")
+        #expect(BuiltInModel.recommended(ramGB: 13).name == "gemma4:e2b")
     }
 
-    @Test func `at the 14 GB floor it recommends Qwen 3.5 4B`() {
+    @Test func `from 14 GB it recommends Qwen 3.5 4B, from 24 GB Qwen 3.5 9B`() {
         #expect(BuiltInModel.recommended(ramGB: 14).name == "qwen3.5:4b")
-        #expect(BuiltInModel.recommended(ramGB: 24).name == "qwen3.5:4b")
+        #expect(BuiltInModel.recommended(ramGB: 23).name == "qwen3.5:4b")
+        #expect(BuiltInModel.recommended(ramGB: 24).name == "qwen3.5:9b")
+        #expect(BuiltInModel.recommended(ramGB: 64).name == "qwen3.5:9b")
     }
 
-    @Test func `the best downloaded model prefers Qwen, then Gemma 4, then LFM3, larger first`() {
-        #expect(BuiltInModel.best(of: ["lfm3:1.7b", "qwen3.5:2b", "gemma4:e4b"])?.name == "qwen3.5:2b")
-        #expect(BuiltInModel.best(of: ["gemma4:e2b", "gemma4:e4b", "lfm3:1.7b"])?.name == "gemma4:e4b")
-        #expect(BuiltInModel.best(of: ["qwen3.5:4b", "qwen3.5:2b"])?.name == "qwen3.5:4b")
-        #expect(BuiltInModel.best(of: ["gemma3:1b"]) == nil) // retired names no longer match
+    @Test func `the best downloaded model follows the bake-off ranking`() {
+        #expect(BuiltInModel.best(of: ["qwen3.5:2b", "gemma4:e2b"])?.name == "gemma4:e2b")
+        #expect(BuiltInModel.best(of: ["gemma4:e2b", "qwen3.5:4b", "qwen3.5:2b"])?.name == "qwen3.5:4b")
+        #expect(BuiltInModel.best(of: ["gemma4:e4b", "qwen3.5:4b"])?.name == "gemma4:e4b")
+        #expect(BuiltInModel.best(of: ["qwen3.5:9b", "gemma4:e4b"])?.name == "qwen3.5:9b")
+        #expect(BuiltInModel.best(of: ["lfm3:1.7b", "gemma3:1b"]) == nil) // retired names no longer match
         #expect(BuiltInModel.best(of: ["unknown"]) == nil)
     }
 }
