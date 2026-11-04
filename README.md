@@ -23,8 +23,8 @@ Requires Xcode 27 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 ```bash
 cd macos
 scripts/test.sh       # MeetyKit logic tests (swift test) + a Debug app build
-scripts/build.sh      # Debug build into macos/build/DerivedData
-scripts/package.sh    # signed Release build into macos/build/Meety.app
+scripts/build.sh      # Debug build into macos/build.noindex/DerivedData
+scripts/package.sh    # signed Release build into macos/build.noindex/Meety.app
 ```
 
 `package.sh` signs with the first Developer ID Application identity (or `SIGN_IDENTITY`), notarizes when `NOTARY_PROFILE` names a `notarytool` keychain profile, and installs to `/Applications/Meety.app` only with `INSTALL=1`.

@@ -12,7 +12,7 @@ Guidance for Claude Code in this repository.
 cd macos
 scripts/test.sh                 # swift test in MeetyKit, then a Debug build of the app
 scripts/build.sh                # xcodegen + Debug build (CONFIG=Release for Release)
-scripts/package.sh              # signed Release build into macos/build/Meety.app (see README)
+scripts/package.sh              # signed Release build into macos/build.noindex/Meety.app (see README)
 (cd MeetyKit && swift test --filter <Suite>)
 ```
 
