@@ -23,6 +23,7 @@ enum MainMenu {
         file.addItem(withTitle: "Stop Recording", action: Selector(("stopRecording:")), keyEquivalent: ".")
         file.addItem(.separator())
         file.addItem(withTitle: "Import Audio…", action: Selector(("importAudio:")), keyEquivalent: "i")
+        file.addItem(withTitle: "Save", action: Selector(("saveMeeting:")), keyEquivalent: "s")
         file.addItem(.separator())
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 
@@ -43,6 +44,8 @@ enum MainMenu {
         let view = submenu(main, "View")
         let sidebar = view.addItem(withTitle: "Toggle Sidebar", action: #selector(NSSplitViewController.toggleSidebar(_:)), keyEquivalent: "s")
         sidebar.keyEquivalentModifierMask = [.command, .control]
+        view.addItem(withTitle: "Show/Hide Transcript", action: Selector(("toggleTranscript:")), keyEquivalent: "i")
+            .keyEquivalentModifierMask = [.command, .control]
         view.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
             .keyEquivalentModifierMask = [.command, .control]
 
@@ -59,7 +62,8 @@ enum MainMenu {
         NSApp.helpMenu = help
         // Symbols for Meety's own commands; AppKit adds them for the standard ones.
         let symbols = ["New Recording": "record.circle", "Pause Recording": "pause.circle", "Stop Recording": "stop.circle",
-                       "Import Audio…": "square.and.arrow.down", "Find": "magnifyingglass", "Toggle Sidebar": "sidebar.left"]
+                       "Import Audio…": "square.and.arrow.down", "Find": "magnifyingglass", "Toggle Sidebar": "sidebar.left",
+                       "Save": "square.and.arrow.down.on.square", "Show/Hide Transcript": "sidebar.right"]
         for item in [file, edit, view].flatMap(\.items) {
             if let symbol = symbols[item.title] { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
         }

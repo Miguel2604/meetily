@@ -133,7 +133,9 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
         meeting.summary.isGenerating ? meeting.stopGeneration() : meeting.showOptions(relativeTo: sender)
     }
 
-    @objc private func toggleTranscript(_ sender: Any?) { meeting?.toggleTranscript() }
+    @objc func toggleTranscript(_ sender: Any?) { meeting?.toggleTranscript() }
+
+    @objc func saveMeeting(_ sender: Any?) { meeting?.saveNow() }
 
     func items(for pickerToolbarItem: NSSharingServicePickerToolbarItem) -> [Any] { meeting?.shareText.map { [$0] } ?? [] }
 
@@ -230,6 +232,7 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation, NSTo
             item.title = phase == .paused ? "Resume Recording" : "Pause Recording"
             return live
         case #selector(newRecording(_:)), #selector(importAudio(_:)): return !live && phase != .stopping
+        case #selector(toggleTranscript(_:)), #selector(saveMeeting(_:)): return meeting != nil
         default: return true
         }
     }

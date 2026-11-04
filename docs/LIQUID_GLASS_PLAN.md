@@ -16,7 +16,7 @@ Branch: `redesign/liquid-glass`, off `enhance/swift-port`. Still AppKit, built i
 | G6 | Corners follow their container: layout guides from `layoutGuide(for: .safeArea(cornerAdaptation:))`, capsules for floating bars. No fixed 8 pt radius. | Liquid Glass corners are concentric with the window. |
 | G7 | Search moves from the sidebar into an `NSSearchToolbarItem`. It still filters the sidebar and still searches transcripts. | Notes and Mail do this on 26. The sidebar gets lighter. |
 | G8 | The Home screen drops its "Recent meetings" list. The sidebar already shows them. | The same list twice is noise. The hero Record button gets the room. |
-| G9 | Summary edits autosave with a 1 s debounce, the same as notes. The Save button goes away. Leaving the meeting or quitting saves too. | Apple apps don't have Save buttons for documents. |
+| G9 | Summary edits autosave with a 1 s debounce, the same as notes. The Save button goes away. File › Save (⌘S), leaving the meeting and quitting save right away. | Apple apps don't have Save buttons for documents. |
 | G10 | Each screen gets a light and a dark snapshot before its slice is committed. Snapshots go in `docs/redesign/` and are linked from the phase report. | UI is checked by running the app (CLAUDE.md). The snapshots are the before/after record. |
 
 ## Target design

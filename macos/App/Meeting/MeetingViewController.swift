@@ -318,6 +318,14 @@ final class MeetingViewController: NSSplitViewController, NSMenuItemValidation {
 
     func toggleTranscript() { toggleInspector(nil) }
 
+    /// File › Save: stores pending summary and notes edits now, showing a failure instead of swallowing it.
+    func saveNow() {
+        Task {
+            do { if summary.isDirty { try await summary.save() } } catch { model.present(error) }
+            await saveNotes()
+        }
+    }
+
     /// What Share sends: the summary, or the transcript when there is no summary yet.
     var shareText: String? { summaryCopyText ?? transcriptCopyText }
 
