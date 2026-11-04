@@ -169,7 +169,13 @@ enum Paste {
 final class DictationOverlay {
     private let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
     private let icon = NSImageView()
-    private let label = NSTextField.meety("", font: Typography.bodyMedium)
+    private let label: NSTextField = { // one line: a wrapping label has no fitting width, so the pill collapses
+        let label = NSTextField(labelWithString: "")
+        label.font = Typography.bodyMedium
+        label.lineBreakMode = .byTruncatingTail
+        label.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
+        return label
+    }()
     private lazy var glass = NSGlassEffectView(wrapping: row, inset: NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 18), cornerRadius: 21)
     private lazy var row = NSStackView(views: [icon, label])
     private var flashing: Task<Void, Never>?
