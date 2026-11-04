@@ -2,9 +2,9 @@ import AppKit
 import Audio
 import Core
 
-/// Settings: toolbar tabs for General, Recording, Transcription, Summary and About (app/settings/page.tsx).
+/// Settings: toolbar tabs for General, Recording, Transcription, Summary, Dictation and About (app/settings/page.tsx).
 final class SettingsWindowController: NSWindowController {
-    enum Tab: Int { case general, recording, transcription, summary, about }
+    enum Tab: Int { case general, recording, transcription, summary, dictation, about }
 
     private let tabs = NSTabViewController()
 
@@ -13,7 +13,8 @@ final class SettingsWindowController: NSWindowController {
         tabs.transitionOptions = [.crossfade, .allowUserInteraction]
         let panes: [(SettingsPane, String)] = [
             (GeneralPane(model: model), "gearshape"), (RecordingPane(model: model), "mic"),
-            (TranscriptionPane(model: model), "waveform"), (SummaryPane(model: model), "sparkles"), (AboutPane(), "info.circle"),
+            (TranscriptionPane(model: model), "waveform"), (SummaryPane(model: model), "sparkles"),
+            (DictationPane(model: model), "waveform.badge.mic"), (AboutPane(), "info.circle"),
         ]
         for (pane, symbol) in panes {
             let item = NSTabViewItem(viewController: pane)

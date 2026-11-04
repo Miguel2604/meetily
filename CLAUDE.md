@@ -53,7 +53,7 @@ macos/
 
 ## Checking UI without a person (Debug builds)
 
-`MEETY_SNAPSHOT=/path.png` (+ `MEETY_SNAPSHOT_DELAY`) captures the front window with `screencapture` (glass included) and exits; `MEETY_APPEARANCE=light|dark` forces the appearance. `MEETY_DEMO_RECORDING=1` records a synthetic tone with a canned engine. `MEETY_OPEN_MEETING=<id>`, `MEETY_SETTINGS_TAB=0…4`, `MEETY_ONBOARDING=1`, `MEETY_IMPORT=<audio>` open those screens. Each launch logs `window visible N ms after process start` (category `launch`).
+`MEETY_SNAPSHOT=/path.png` (+ `MEETY_SNAPSHOT_DELAY`) captures the front window with `screencapture` (glass included) and exits; `MEETY_APPEARANCE=light|dark` forces the appearance. `MEETY_DEMO_RECORDING=1` records a synthetic tone with a canned engine. `MEETY_OPEN_MEETING=<id>`, `MEETY_SETTINGS_TAB=0…5`, `MEETY_ONBOARDING=1`, `MEETY_IMPORT=<audio>` open those screens. Each launch logs `window visible N ms after process start` (category `launch`).
 
 ## Platform notes
 

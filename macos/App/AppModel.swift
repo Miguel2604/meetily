@@ -19,6 +19,8 @@ final class AppModel {
     @ObservationIgnored private(set) lazy var summaries = SummaryService(store: store, builtIn: builtIn)
     @ObservationIgnored private(set) lazy var library = ModelLibrary(app: self)
     @ObservationIgnored let notifier = Notifier()
+    /// Push-to-talk dictation; created at launch so its key monitors are live.
+    @ObservationIgnored private(set) lazy var dictation = DictationController(model: self)
     /// The summary template picked last in this session.
     @ObservationIgnored var summaryTemplate = "standard_meeting"
     private(set) var meetings: [Meeting] = []
@@ -89,10 +91,7 @@ final class AppModel {
         report("Loading transcription model… The first load after an install or update compiles it for the Neural Engine and can take a few minutes.")
         let engine: any TranscriptionEngine
         do {
-            switch EngineChoice.route(language: settings.language, config: try await store.transcriptConfig()) {
-            case .parakeet(let model): engine = try await parakeet.engine(model)
-            case .whisper(let model, let language): engine = try await whisper.engine(model, language: language)
-            }
+            engine = try await transcriptionEngine()
         } catch {
             throw RecordingError(description: "Transcription model not ready: \(error). Download it in Settings › Transcription.")
         }
@@ -118,6 +117,14 @@ final class AppModel {
             title: title, folder: Paths.meetingFolder(base: settings.saveFolder, name: title), engine: engine,
             detector: detector, microphone: microphone, system: system,
             microphoneName: microphone?.device?.name, systemName: system == nil ? nil : "System audio", notices: notices)
+    }
+
+    /// The prepared engine for the language setting, shared by recording and dictation.
+    func transcriptionEngine() async throws -> any TranscriptionEngine {
+        switch EngineChoice.route(language: settings.language, config: try await store.transcriptConfig()) {
+        case .parakeet(let model): try await parakeet.engine(model)
+        case .whisper(let model, let language): try await whisper.engine(model, language: language)
+        }
     }
 
     /// A fresh Silero stream; the model loads (and downloads, ~2 MB) once.

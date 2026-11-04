@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task { await model.reloadMeetings() }
         statusItem = StatusItem(model: model) { [weak self] in self?.showMainWindow(nil) }
+        _ = model.dictation
         model.notifier.openMeeting = { [weak self, weak model] id in
             self?.showMainWindow(nil)
             model?.route = .meeting(id)
