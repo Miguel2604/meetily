@@ -143,7 +143,8 @@ final class MeetingViewController: NSSplitViewController, NSMenuItemValidation {
             player.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             player.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
             player.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
-            player.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40).withPriority(.defaultHigh),
+            // Below the window-resize priority, so the capped player never pins the window width.
+            player.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40).withPriority(.dragThatCannotResizeWindow),
         ])
         return root
     }

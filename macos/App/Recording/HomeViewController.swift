@@ -65,7 +65,8 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
             active.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             active.widthAnchor.constraint(lessThanOrEqualToConstant: 760),
             active.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor, constant: 24),
-            active.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -48).withPriority(.defaultHigh),
+            // Below the window-resize priority, so the capped column never pins the window width.
+            active.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -48).withPriority(.dragThatCannotResizeWindow),
             active.bottomAnchor.constraint(equalTo: root.bottomAnchor),
 
             bar.centerXAnchor.constraint(equalTo: root.centerXAnchor),
