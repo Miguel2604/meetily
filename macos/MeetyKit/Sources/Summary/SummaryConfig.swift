@@ -45,6 +45,9 @@ public struct SummaryConfig: Sendable, Equatable {
     public func validate() throws(LLMError) {
         func web(_ url: String) -> Bool { url.hasPrefix("http://") || url.hasPrefix("https://") }
         guard !model.trimmingCharacters(in: .whitespaces).isEmpty else { throw .message("Choose a model.") }
+        if provider == .builtin, BuiltInModel.named(model.trimmingCharacters(in: .whitespaces)) == nil { // the box takes free text
+            throw .message("Choose a built-in model from the list, for example \(BuiltInModel.catalog[0].name).")
+        }
         if Self.keyed.contains(provider), apiKey.trimmingCharacters(in: .whitespaces).isEmpty {
             throw .message("Enter an API key for this provider.")
         }
