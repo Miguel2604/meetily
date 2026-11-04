@@ -46,7 +46,12 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(qwen4.file == "Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf")
         #expect(qwen4.sizeMB == 2614)
-        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "gemma4:e2b", "gemma4:e4b", "lfm3:1.7b"])
+        #expect(BuiltInModel.catalog.map(\.name) == ["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b", "gemma4:e2b", "gemma4:e4b",
+                                                      "minicpm5:2b", "granite4.2:3b", "lfm3:1.7b"])
+        let qwen9 = try #require(BuiltInModel.named("qwen3.5:9b"))
+        #expect(qwen9.url.absoluteString == "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf")
+        #expect(qwen9.sizeMB == 5417)
+        #expect(qwen9.template == "qwen3.5_nonthinking" && qwen9.sampling == qwen2.sampling)
         #expect(BuiltInModel.catalog.first == qwen2) // the default
     }
 
@@ -74,6 +79,21 @@ let tinyLlama = BuiltInModel(name: "tiny:1b", displayName: "Tiny", file: "tiny.g
         #expect(lfm.template == "lfm3_nonthinking")
         #expect(lfm.sampling == Sampling(temperature: 0.1, topK: 50, topP: 1, presencePenalty: 0, frequencyPenalty: 0,
                                          repeatPenalty: 1.1, penaltyLastN: 256, stopTokens: ["<|im_end|>"]))
+    }
+
+    @Test func `MiniCPM5 and Granite 4.2 use their official GGUFs and model-card sampling`() throws {
+        let minicpm = try #require(BuiltInModel.named("minicpm5:2b"))
+        #expect(minicpm.url.absoluteString == "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf")
+        #expect(minicpm.sizeMB == 1489)
+        #expect(minicpm.template == "qwen3.5_nonthinking") // same ChatML and empty think block
+        #expect(minicpm.sampling == Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
+                                             repeatPenalty: 1.05, penaltyLastN: 256, stopTokens: ["<|im_end|>"]))
+        let granite = try #require(BuiltInModel.named("granite4.2:3b"))
+        #expect(granite.url.absoluteString == "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf")
+        #expect(granite.sizeMB == 2140)
+        #expect(granite.template == "lfm3_nonthinking") // same ChatML and <think></think>
+        #expect(granite.sampling == Sampling(temperature: 1, topK: 0, topP: 0.95, presencePenalty: 0, frequencyPenalty: 0,
+                                             repeatPenalty: 1, penaltyLastN: 0, stopTokens: ["<|im_end|>"]))
     }
 
     @Test func `the LFM3 template turns thinking off and escapes control markers`() throws {
