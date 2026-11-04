@@ -103,8 +103,8 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         let hero = NSButton.meetyCircle("mic.fill", label: "Start recording (⌘N)", role: .primary, target: self, action: #selector(record))
         hero.controlSize = .extraLarge
         hero.bezelColor = .systemRed
-        hero.contentTintColor = .white
-        hero.symbolConfiguration = .init(pointSize: 30, weight: .semibold)
+        // A prominent glass button picks its own content color, so the white is baked into the symbol.
+        hero.image = hero.image?.withSymbolConfiguration(.init(pointSize: 30, weight: .semibold).applying(.init(paletteColors: [.white])))
         hero.widthAnchor.constraint(equalToConstant: 88).isActive = true
         hero.heightAnchor.constraint(equalToConstant: 88).isActive = true
         let title = NSTextField.meety("Start Recording", font: Typography.title)
