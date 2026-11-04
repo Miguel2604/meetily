@@ -1,10 +1,10 @@
 import AppKit
 import Core
 
-/// Source-list sidebar (Sidebar/index.tsx): Home and meetings by date. Its transcript search field lives in the toolbar.
+/// Source-list sidebar (Sidebar/index.tsx): Home, the recording in progress, and meetings by date. Its transcript search field lives in the toolbar.
 final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate, NSMenuItemValidation {
     private final class Node {
-        enum Kind { case home, group(String), meeting(Meeting, snippet: String?) }
+        enum Kind { case home, recording, group(String), meeting(Meeting, snippet: String?) }
         let kind: Kind
         let children: [Node]
         init(_ kind: Kind, _ children: [Node] = []) { self.kind = kind; self.children = children }
@@ -70,7 +70,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         super.viewDidLoad()
         track { [weak self] in
             guard let self else { return }
-            _ = model.meetings
+            _ = (model.meetings, isRecording, model.recorder.title)
             rebuild()
         }
         track { [weak self] in
@@ -88,7 +88,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         let query = search.stringValue
         let meetings = MeetingList.filtered(model.meetings, query: query, matches: matches)
         let snippets = Dictionary(matches.map { ($0.id, $0.matchContext) }, uniquingKeysWith: { first, _ in first })
-        roots = [Node(.home)] + MeetingList.grouped(meetings).map { group in
+        roots = [Node(.home)] + (isRecording ? [Node(.recording)] : []) + MeetingList.grouped(meetings).map { group in
             Node(.group(group.title), group.meetings.map { Node(.meeting($0, snippet: snippets[$0.id])) })
         }
         outline.reloadData()
@@ -101,7 +101,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     private func selectRoute() {
         let row: Int
         switch model.route {
-        case .home: row = outline.row(forItem: roots.first)
+        case .home:
+            let recording = roots.first { if case .recording = $0.kind { true } else { false } }
+            row = outline.row(forItem: recording ?? roots.first)
         case .meeting(let id):
             row = (0..<outline.numberOfRows).first { (outline.item(atRow: $0) as? Node)?.meeting?.id == id } ?? -1
         }
@@ -110,6 +112,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         if row >= 0 { outline.selectRowIndexes([row], byExtendingSelection: false); outline.scrollRowToVisible(row) }
         else { outline.deselectAll(nil) }
         syncingSelection = false
+    }
+
+    /// Recording, paused, or starting up: the recording row shows and Home selects it.
+    private var isRecording: Bool {
+        switch model.recorder.phase { case .idle, .failed: false; default: true }
     }
 
     @objc private func searchChanged(_ sender: NSSearchField) {
@@ -149,15 +156,21 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         switch node.kind {
         case .group(let title):
             let cell = reuse("group") { SidebarCell(header: true) }
-            cell.set(title: title, snippet: nil, symbol: nil)
+            cell.set(title: title, subtitle: nil, symbol: nil)
             return cell
         case .home:
             let cell = reuse("row") { SidebarCell(header: false) }
-            cell.set(title: "Home", snippet: nil, symbol: "house")
+            cell.set(title: "Home", subtitle: nil, symbol: "house")
+            return cell
+        case .recording:
+            let cell = reuse("row") { SidebarCell(header: false) }
+            let title = model.recorder.title
+            cell.set(title: title.isEmpty ? "New Recording" : title, subtitle: model.recorder.phase == .paused ? "Paused" : "Recording",
+                     symbol: "record.circle.fill", tint: .systemRed, pulse: model.recorder.phase != .paused)
             return cell
         case .meeting(let meeting, let snippet):
             let cell = reuse("row") { SidebarCell(header: false) }
-            cell.set(title: meeting.title, snippet: snippet, symbol: nil)
+            cell.set(title: meeting.title, subtitle: snippet ?? meeting.createdDate?.formatted(date: .omitted, time: .shortened), symbol: nil)
             return cell
         }
     }
@@ -172,7 +185,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !syncingSelection, let node = outline.item(atRow: outline.selectedRow) as? Node else { return }
         switch node.kind {
-        case .home: model.route = .home
+        case .home, .recording: model.route = .home
         case .meeting(let meeting, _): model.route = .meeting(meeting.id)
         case .group: break
         }
@@ -247,7 +260,7 @@ final class SidebarOutlineView: NSOutlineView {
     }
 }
 
-/// A sidebar row: title (and a transcript-match snippet while searching), or a section header.
+/// A sidebar row: title and a second line (the time, or a transcript-match snippet while searching), or a section header.
 final class SidebarCell: NSTableCellView {
     private let snippet = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
 
@@ -282,12 +295,15 @@ final class SidebarCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("code-built UI") }
 
-    func set(title: String, snippet text: String?, symbol: String?) {
+    func set(title: String, subtitle text: String?, symbol: String?, tint: NSColor? = nil, pulse: Bool = false) {
         textField?.stringValue = title
         textField?.toolTip = title
         snippet.stringValue = text ?? ""
         snippet.isHidden = text == nil
         imageView?.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         imageView?.isHidden = symbol == nil
+        imageView?.contentTintColor = tint
+        imageView?.removeAllSymbolEffects()
+        if pulse { imageView?.addSymbolEffect(.pulse) }
     }
 }
