@@ -5,27 +5,25 @@ import AppKit
 final class ModelRowView: CardView {
     let item: ModelLibrary.Item
     private let library: ModelLibrary
-    private let status = NSTextField.meety("", font: Typography.caption, color: .meetyMutedForeground)
+    private let status = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
     private let progress = NSProgressIndicator()
     private lazy var primary = NSButton.meety("Download", target: self, action: #selector(primaryAction))
-    private lazy var delete = NSButton.meety("", symbol: "trash", target: self, action: #selector(deleteAction))
+    private lazy var delete = NSButton.meetyCircle("trash", label: "Delete \(item.title)", target: self, action: #selector(deleteAction))
 
     init(item: ModelLibrary.Item, library: ModelLibrary) {
         self.item = item
         self.library = library
         super.init(frame: .zero)
         let title = NSTextField.meety(item.title, font: Typography.bodyMedium)
-        let size = NSTextField.meety(Self.size(item.sizeMB), font: Typography.caption, color: .meetyMutedForeground)
-        let detail = NSTextField.meety(item.detail, font: Typography.callout, color: .meetyMutedForeground)
+        let size = NSTextField.meety(Self.size(item.sizeMB), font: Typography.caption, color: .secondaryLabelColor)
+        let detail = NSTextField.meety(item.detail, font: Typography.callout, color: .secondaryLabelColor)
         detail.preferredMaxLayoutWidth = 340
         progress.style = .bar
         progress.controlSize = .small
         progress.minValue = 0
         progress.maxValue = 1
         primary.controlSize = .regular
-        delete.controlSize = .regular
         delete.toolTip = "Delete the model to free up space"
-        delete.setAccessibilityLabel("Delete \(item.title)")
 
         let heading = NSStackView(views: [title, size])
         heading.spacing = 6
@@ -65,7 +63,7 @@ final class ModelRowView: CardView {
         progress.isHidden = true
         delete.isHidden = false
         primary.isEnabled = true
-        status.textColor = .meetyMutedForeground
+        status.textColor = .secondaryLabelColor
         switch state {
         case .missing:
             (primary.title, status.stringValue) = ("Download", "Not downloaded")
@@ -88,7 +86,7 @@ final class ModelRowView: CardView {
         case .failed(let message):
             primary.title = "Retry"
             status.stringValue = message
-            status.textColor = .meetyDestructive
+            status.textColor = .systemRed
         }
         setAccessibilityLabel("\(item.title), \(status.stringValue)")
     }

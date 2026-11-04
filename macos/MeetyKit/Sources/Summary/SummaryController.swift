@@ -3,14 +3,15 @@ import Foundation
 import Observation
 
 /// One meeting's summary pane: load (resuming a run still going), generate, cancel, edit and save.
-/// Edits are stored as `{"markdown": ...}` (useSummaryGeneration.ts semantics).
+/// Edits are stored as `{"markdown": ...}` (useSummaryGeneration.ts semantics) and save themselves once typing
+/// pauses for `autosaveDelay`.
 @MainActor @Observable
 public final class SummaryController {
     public let meetingID: String
     public private(set) var isGenerating = false
     public private(set) var error: String?
     /// The editor's text.
-    public var markdown = ""
+    public var markdown = "" { didSet { scheduleAutosave() } }
     public private(set) var savedMarkdown = ""
     /// The meeting title, updated when a summary renames the meeting.
     public private(set) var title: String?
@@ -20,12 +21,15 @@ public final class SummaryController {
     @ObservationIgnored private let pollInterval: Duration
     @ObservationIgnored private var processID: String?
     @ObservationIgnored private var data: [String: Any] = [:]
+    @ObservationIgnored private let autosaveDelay: Duration
+    @ObservationIgnored private var autosave: Task<Void, Never>?
 
-    public init(meetingID: String, store: Store, service: SummaryService, pollInterval: Duration = .seconds(1)) {
+    public init(meetingID: String, store: Store, service: SummaryService, pollInterval: Duration = .seconds(1), autosaveDelay: Duration = .seconds(1)) {
         self.meetingID = meetingID
         self.store = store
         self.service = service
         self.pollInterval = pollInterval
+        self.autosaveDelay = autosaveDelay
     }
 
     public var hasSummary: Bool { !savedMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -54,6 +58,8 @@ public final class SummaryController {
         guard !isGenerating else { return }
         error = nil
         do {
+            // A failed or cancelled run restores the stored summary, so pending edits must be stored first.
+            if isDirty { try await save() }
             let transcripts = try await store.transcripts(meetingID: meetingID)
             guard !transcripts.isEmpty else { error = "No transcripts available for summary"; return }
             isGenerating = true
@@ -83,6 +89,17 @@ public final class SummaryController {
         try await service.save(meetingID: meetingID, summary: payload)
         data = summary
         savedMarkdown = snapshot
+    }
+
+    /// Restarts the wait on every edit; a generated or loaded summary is already saved, so nothing fires for it.
+    private func scheduleAutosave() {
+        autosave?.cancel()
+        guard isDirty, !isGenerating else { return }
+        autosave = Task { [weak self, autosaveDelay] in
+            try? await Task.sleep(for: autosaveDelay)
+            guard !Task.isCancelled, let self, isDirty, !isGenerating else { return }
+            do { try await save() } catch { self.error = "Couldn't save the summary: \(error)" }
+        }
     }
 
     private func isRunning(_ state: SummaryState) -> Bool { state.status == "pending" || state.status == "processing" }

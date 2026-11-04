@@ -2,11 +2,22 @@ import AppKit
 import Transcription
 import UniformTypeIdentifiers
 
-/// The main window: sidebar of meetings and a content area routed by `AppModel.route`.
-final class MainWindowController: NSWindowController, NSMenuItemValidation {
+/// The main window: sidebar of meetings and a content area routed by `AppModel.route`, under a glass toolbar:
+/// the title, the open meeting's Summary/Notes, Generate, Share, More and transcript items, Record (Stop while
+/// recording) and transcript search.
+final class MainWindowController: NSWindowController, NSMenuItemValidation, NSToolbarDelegate, NSSharingServicePickerToolbarItemDelegate {
     private let model: AppModel
     private let sidebar: SidebarViewController
     private let router: ContentRouter
+    private let recordItem = NSToolbarItem(itemIdentifier: .record)
+    private let modeItem = NSToolbarItemGroup(itemIdentifier: .mode, titles: ["Summary", "Notes"], selectionMode: .selectOne,
+                                              labels: ["Summary", "Notes"], target: nil, action: #selector(modeChosen(_:)))
+    private let generateItem = NSToolbarItem(itemIdentifier: .generate)
+    private let shareItem = NSSharingServicePickerToolbarItem(itemIdentifier: .share)
+    private let moreItem = NSMenuToolbarItem(itemIdentifier: .more)
+    private let transcriptItem = NSToolbarItem(itemIdentifier: .transcript)
+    private var meeting: MeetingViewController? { router.children.first as? MeetingViewController }
+    private var clock: Timer?
 
     init(model: AppModel) {
         self.model = model
@@ -23,7 +34,6 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
         let window = NSWindow(contentViewController: split)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.title = "Meety"
-        window.titleVisibility = .hidden
         window.toolbarStyle = .unified
         window.minSize = NSSize(width: 760, height: 480)
         window.setContentSize(NSSize(width: 1100, height: 720))
@@ -33,6 +43,140 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
         super.init(window: window)
         window.delegate = self
         window.registerForDraggedTypes([.fileURL])
+
+        let toolbar = NSToolbar(identifier: "Main")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.centeredItemIdentifiers = [.mode]
+        window.toolbar = toolbar
+        recordItem.style = .prominent
+        recordItem.autovalidates = false
+        recordItem.target = self
+        buildMeetingItems()
+        router.onShow = { [weak self] in self?.renderMeetingItems() }
+        track { [weak self] in self?.renderRecord() }
+        track { [weak self] in self?.renderTitle() }
+    }
+
+    // MARK: Toolbar
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .mode, .flexibleSpace, .generate, .share, .more, .transcript, .space, .record, .search]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        switch id {
+        case .record: return recordItem
+        case .mode: return modeItem
+        case .generate: return generateItem
+        case .share: return shareItem
+        case .more: return moreItem
+        case .transcript: return transcriptItem
+        case .search:
+            let item = NSSearchToolbarItem(itemIdentifier: id)
+            item.searchField = sidebar.search
+            item.label = "Search"
+            return item
+        default: return nil
+        }
+    }
+
+    private func buildMeetingItems() {
+        modeItem.target = self
+        modeItem.selectedIndex = 0
+        generateItem.target = self
+        generateItem.action = #selector(generateChosen(_:))
+        generateItem.autovalidates = false
+        shareItem.delegate = self
+        shareItem.label = "Share"
+        moreItem.label = "More"
+        moreItem.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "More")
+        moreItem.showsIndicator = false
+        transcriptItem.label = "Transcript"
+        transcriptItem.toolTip = "Show or hide the transcript"
+        transcriptItem.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Transcript")
+        transcriptItem.target = self
+        transcriptItem.action = #selector(toggleTranscript(_:))
+        renderMeetingItems()
+    }
+
+    /// Meeting items show only on a meeting, follow its generating state, and act on it.
+    private func renderMeetingItems() {
+        let meeting = meeting
+        for item in [modeItem, generateItem, shareItem, moreItem, transcriptItem] { item.isHidden = meeting == nil }
+        guard let meeting else { return }
+        modeItem.selectedIndex = meeting.mode == .notes ? 1 : 0
+        let menu = NSMenu()
+        for (title, action) in [("Copy Summary", #selector(MeetingViewController.copySummary)), ("Copy Transcript", #selector(MeetingViewController.copyTranscript)),
+                                ("Export Summary…", #selector(MeetingViewController.exportSummary)), ("", nil),
+                                ("Show Recording in Finder", #selector(MeetingViewController.openFolder)), ("Enhance Transcript…", #selector(MeetingViewController.retranscribe))] as [(String, Selector?)] {
+            guard let action else { menu.addItem(.separator()); continue }
+            menu.addItem(withTitle: title, action: action, keyEquivalent: "").target = meeting
+        }
+        moreItem.menu = menu
+        track { [weak self, weak meeting] in
+            // A meeting left while it was still generating stays alive; only the shown one drives the toolbar.
+            guard let self, let meeting, meeting === self.meeting else { return }
+            let generating = meeting.summary.isGenerating
+            generateItem.label = generating ? "Stop" : "Generate"
+            generateItem.toolTip = generating ? "Stop writing the summary" : "Generate a summary"
+            generateItem.image = NSImage(systemSymbolName: generating ? "stop.circle" : "sparkles", accessibilityDescription: generateItem.label)
+        }
+    }
+
+    @objc private func modeChosen(_ sender: NSToolbarItemGroup) { meeting?.mode = sender.selectedIndex == 1 ? .notes : .summary }
+
+    @objc private func generateChosen(_ sender: NSToolbarItem) {
+        guard let meeting else { return }
+        meeting.summary.isGenerating ? meeting.stopGeneration() : meeting.showOptions(relativeTo: sender)
+    }
+
+    @objc func toggleTranscript(_ sender: Any?) { meeting?.toggleTranscript() }
+
+    @objc func saveMeeting(_ sender: Any?) { meeting?.saveNow() }
+
+    func items(for pickerToolbarItem: NSSharingServicePickerToolbarItem) -> [Any] { meeting?.shareText.map { [$0] } ?? [] }
+
+    /// Record, or Stop with the elapsed time while recording; disabled while starting or stopping.
+    private func renderRecord() {
+        let phase = model.recorder.phase
+        let live = phase == .recording || phase == .paused
+        let busy = !live && phase != .idle && !phase.isFailed
+        recordItem.isEnabled = !busy
+        recordItem.backgroundTintColor = .systemRed
+        recordItem.action = live ? #selector(stopRecording(_:)) : #selector(newRecording(_:))
+        recordItem.label = live ? "Stop" : "Record"
+        recordItem.toolTip = live ? "Stop recording (⌘.)" : "Record a meeting (⌘N)"
+        recordItem.image = NSImage(systemSymbolName: live ? "stop.fill" : "record.circle", accessibilityDescription: recordItem.label)
+        if live, clock == nil {
+            clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tickClock() } }
+            tickClock()
+        } else if !live {
+            clock?.invalidate()
+            clock = nil
+            recordItem.title = ""
+        }
+    }
+
+    private func tickClock() { recordItem.title = Clock.duration(model.recorder.elapsed()) }
+
+    /// "Meety" and the meeting count on Home; the meeting's title and date on a meeting.
+    private func renderTitle() {
+        guard let window else { return }
+        switch model.route {
+        case .home:
+            window.titleVisibility = .visible
+            window.title = "Meety"
+            window.subtitle = model.meetings.count == 1 ? "1 meeting" : "\(model.meetings.count) meetings"
+        case .meeting(let id):
+            // The document shows the title; the toolbar keeps the Summary/Notes control alone.
+            window.titleVisibility = .hidden
+            let meeting = model.meetings.first { $0.id == id }
+            window.title = meeting?.title ?? "Meeting"
+            window.subtitle = meeting?.createdDate?.formatted(date: .long, time: .shortened) ?? ""
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("code-built UI") }
@@ -88,6 +232,7 @@ final class MainWindowController: NSWindowController, NSMenuItemValidation {
             item.title = phase == .paused ? "Resume Recording" : "Pause Recording"
             return live
         case #selector(newRecording(_:)), #selector(importAudio(_:)): return !live && phase != .stopping
+        case #selector(toggleTranscript(_:)), #selector(saveMeeting(_:)): return meeting != nil
         default: return true
         }
     }
@@ -122,16 +267,20 @@ extension MainWindowController: NSWindowDelegate {
         guard let content = window?.contentView else { return }
         content.subviews.first { $0.identifier == id }?.removeFromSuperview()
         guard show else { return }
-        let card = CardView()
-        card.identifier = id
-        card.fill = NSColor.meetyBackground.withAlphaComponent(0.92)
-        card.stroke = .meetyForeground
         let icon = NSImageView(image: NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)!)
-        icon.symbolConfiguration = .init(pointSize: 32, weight: .light)
-        let stack = NSStackView(views: [icon, NSTextField.meety("Drop audio file to import", font: Typography.headline)])
+        icon.symbolConfiguration = .init(pointSize: 40, weight: .light)
+        icon.contentTintColor = .controlAccentColor
+        let stack = NSStackView(views: [icon, NSTextField.meety("Drop audio file to import", font: Typography.title)])
         stack.orientation = .vertical
+        stack.spacing = 12
+        let centered = NSView()
         stack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(stack)
+        centered.addSubview(stack)
+        stack.centerXAnchor.constraint(equalTo: centered.centerXAnchor).isActive = true
+        stack.centerYAnchor.constraint(equalTo: centered.centerYAnchor).isActive = true
+        let card = NSGlassEffectView(wrapping: centered, inset: NSEdgeInsets(), cornerRadius: 24)
+        card.identifier = id
+        card.tintColor = NSColor.controlAccentColor.withAlphaComponent(0.12)
         card.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(card)
         NSLayoutConstraint.activate([
@@ -139,16 +288,26 @@ extension MainWindowController: NSWindowDelegate {
             card.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             card.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
             card.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
-            stack.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: card.centerYAnchor),
         ])
     }
+}
+
+private extension NSToolbarItem.Identifier {
+    static let record = Self("record")
+    static let search = Self("search")
+    static let mode = Self("mode")
+    static let generate = Self("generate")
+    static let share = Self("share")
+    static let more = Self("more")
+    static let transcript = Self("transcript")
 }
 
 /// Swaps the content pane for the current route.
 final class ContentRouter: NSViewController {
     private let model: AppModel
     private var shown: AppModel.Route?
+    /// Called after the content changes, so the toolbar can follow the new screen.
+    var onShow: (() -> Void)?
     private lazy var home = HomeViewController(model: model)
 
     init(model: AppModel) {
@@ -189,6 +348,7 @@ final class ContentRouter: NSViewController {
         child.view.frame = view.bounds
         child.view.autoresizingMask = [.width, .height]
         view.addSubview(child.view)
+        onShow?()
     }
 }
 

@@ -3,7 +3,7 @@ import Audio
 import Core
 import Transcription
 
-/// Home: "Ready to record" with recent meetings, and the live recording screen once a recording starts
+/// Home: a large Record button with the input pickers, and the live recording screen once a recording starts
 /// (page.tsx, HomeIdle.tsx, TranscriptPanel.tsx, RecordingControls.tsx).
 final class HomeViewController: NSViewController, NSTextFieldDelegate {
     private let model: AppModel
@@ -11,36 +11,31 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
 
     // Idle
     private let idle = NSStackView()
-    private let recentCount = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
-    private let recentList = NSStackView()
 
     // Active
     private let active = NSStackView()
     private let titleField = NSTextField(string: "")
-    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let status = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let statusDot = CardView()
-    private let noticeBanner = CardView()
+    private var noticeBanner: NSGlassEffectView!
     private let noticeLabel = NSTextField.meety("", font: Typography.callout)
     private let transcript = TranscriptListView()
-    private let listening = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let listening = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
 
-    // Control bar
-    private let bar = CardView()
-    private lazy var recordButton = NSButton.meety("Start recording", symbol: "record.circle", role: .primary, target: self, action: #selector(record))
+    // Floating glass control bar
+    private let bar = NSGlassEffectContainerView()
     private let micPopup = NSPopUpButton()
     private let systemPopup = NSPopUpButton()
     private let spinner = NSProgressIndicator()
-    private let progressLabel = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
-    private lazy var pauseButton = NSButton.meety("Pause", symbol: "pause.fill", target: self, action: #selector(togglePause))
-    private lazy var stopButton = NSButton.meety("Stop", symbol: "stop.fill", role: .destructive, target: self, action: #selector(stop))
-    private let micMeter = LevelMeterView(label: "Microphone level")
-    private let systemMeter = LevelMeterView(label: "System audio level")
+    private let progressLabel = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
+    private lazy var pauseButton = NSButton.meetyCircle("pause.fill", label: "Pause recording", target: self, action: #selector(togglePause))
+    private lazy var stopButton = NSButton.meetyCircle("stop.fill", label: "Stop recording", role: .destructive, target: self, action: #selector(stop))
+    private let waveform = WaveformView()
     private let elapsed = NSTextField(labelWithString: "0:00")
-    private var idleControls: [NSView] = []
     private var startingControls: [NSView] = []
     private var recordingControls: [NSView] = []
 
-    private let consent = CardView()
+    private var consent: NSGlassEffectView!
     private var displayLink: CADisplayLink?
     private var shownFailure: String?
     private var lastPhase = Recorder.Phase.idle
@@ -62,25 +57,24 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         let column = root.widthAnchor.constraint(greaterThanOrEqualToConstant: 0)
         column.isActive = true
         NSLayoutConstraint.activate([
-            idle.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 40),
+            idle.centerYAnchor.constraint(equalTo: root.safeAreaLayoutGuide.centerYAnchor, constant: -20),
             idle.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            idle.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
             idle.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor, constant: 32),
-            idle.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -64).withPriority(.defaultHigh),
 
             active.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 16),
             active.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             active.widthAnchor.constraint(lessThanOrEqualToConstant: 760),
             active.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor, constant: 24),
-            active.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -48).withPriority(.defaultHigh),
-            active.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: -12),
+            // Below the window-resize priority, so the capped column never pins the window width.
+            active.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -48).withPriority(.dragThatCannotResizeWindow),
+            active.bottomAnchor.constraint(equalTo: root.bottomAnchor),
 
             bar.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             bar.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -20),
             bar.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor, constant: 16),
 
             consent.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-            consent.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: -12),
+            consent.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 16),
             consent.widthAnchor.constraint(equalToConstant: 300),
         ])
         view = root
@@ -94,7 +88,6 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
             transcript.set(recorder.segments.map { .init(start: $0.start, text: $0.text) })
             renderListening()
         }
-        track { [weak self] in self?.renderRecent() }
         track { [weak self] in
             guard let self else { return }
             _ = (model.settings.preferredMicDevice, model.settings.recordSystemAudio)
@@ -108,24 +101,25 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     // MARK: Build
 
     private func buildIdle() {
-        let heading = NSTextField.meety("Ready to record", font: NSFont.systemFont(ofSize: 24, weight: .semibold))
-        let intro = NSTextField.meety(
-            "Start recording when the call begins. Meety writes the transcript as people talk and turns it into notes afterwards. Audio and text stay on this computer.",
-            font: NSFont.systemFont(ofSize: 15), color: .meetyMutedForeground)
-        let recentTitle = NSTextField.meety("Recent meetings", font: Typography.bodyMedium)
-        let header = NSStackView(views: [recentTitle, NSView(), recentCount])
-        let rule = NSBox()
-        rule.boxType = .separator
-        recentList.orientation = .vertical
-        recentList.alignment = .leading
-        recentList.spacing = 0
+        let hero = NSButton.meetyCircle("mic.fill", label: "Start recording (⌘N)", role: .primary, target: self, action: #selector(record))
+        hero.controlSize = .extraLarge
+        hero.bezelColor = .systemRed
+        // A prominent glass button picks its own content color, so the white is baked into the symbol.
+        hero.image = hero.image?.withSymbolConfiguration(.init(pointSize: 30, weight: .semibold).applying(.init(paletteColors: [.white])))
+        hero.widthAnchor.constraint(equalToConstant: 88).isActive = true
+        hero.heightAnchor.constraint(equalToConstant: 88).isActive = true
+        let title = NSTextField.meety("Start Recording", font: Typography.title)
+        let hint = NSTextField.meety("Press ⌘N from anywhere in Meety. Audio and transcripts stay on this Mac.", font: Typography.callout, color: .secondaryLabelColor)
+        hint.alignment = .center
+        hint.preferredMaxLayoutWidth = 320
+        let pickers = NSStackView(views: [micPopup, systemPopup])
+        pickers.spacing = 8
         idle.orientation = .vertical
-        idle.alignment = .leading
-        idle.spacing = 8
-        for v in [heading, intro, header, rule, recentList] as [NSView] { idle.addArrangedSubview(v) }
-        idle.setCustomSpacing(40, after: intro)
-        idle.setCustomSpacing(4, after: header)
-        for v in [intro, header, rule, recentList] as [NSView] { v.widthAnchor.constraint(equalTo: idle.widthAnchor).isActive = true }
+        idle.alignment = .centerX
+        idle.spacing = 6
+        for v in [hero, title, hint, pickers] as [NSView] { idle.addArrangedSubview(v) }
+        idle.setCustomSpacing(20, after: hero)
+        idle.setCustomSpacing(24, after: hint)
     }
 
     private func buildActive() {
@@ -150,12 +144,9 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         dismiss.isBordered = false
         let noticeRow = NSStackView(views: [warning, noticeLabel, dismiss])
         noticeRow.spacing = 8
-        noticeRow.translatesAutoresizingMaskIntoConstraints = false
         noticeLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        noticeBanner.fill = .meetyMuted
-        noticeBanner.stroke = nil
-        noticeBanner.addSubview(noticeRow)
-        pin(noticeRow, in: noticeBanner, inset: 8)
+        noticeBanner = NSGlassEffectView(wrapping: noticeRow, inset: NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 8), cornerRadius: 16)
+        noticeBanner.tintColor = NSColor.systemOrange.withAlphaComponent(0.25)
 
         listening.alignment = .center
         active.orientation = .vertical
@@ -165,6 +156,9 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         active.setCustomSpacing(12, after: statusRow)
         for v in [titleField, noticeBanner, listening, transcript] as [NSView] { v.widthAnchor.constraint(equalTo: active.widthAnchor).isActive = true }
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
+        // The live transcript scrolls under the floating bar.
+        transcript.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 96, right: 0)
+        transcript.scrollerInsets = transcript.contentInsets
     }
 
     private func buildBar() {
@@ -176,32 +170,30 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         systemPopup.setAccessibilityLabel("System audio")
         spinner.style = .spinning
         spinner.controlSize = .small
-        elapsed.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        let micIcon = NSImageView(image: NSImage(systemSymbolName: "mic", accessibilityDescription: nil)!)
-        let systemIcon = NSImageView(image: NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil)!)
-        for icon in [micIcon, systemIcon] { icon.contentTintColor = .meetyMutedForeground }
-        let meters = NSStackView(views: [micIcon, micMeter, systemIcon, systemMeter])
-        meters.spacing = 6
+        elapsed.font = NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
+        let dot = NSImageView(image: NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)!)
+        dot.symbolConfiguration = .init(pointSize: 9, weight: .regular)
+        dot.contentTintColor = .systemRed
 
-        idleControls = [recordButton, micPopup, systemPopup]
         startingControls = [spinner, progressLabel]
-        recordingControls = [elapsed, meters, pauseButton, stopButton]
-        let row = NSStackView(views: idleControls + startingControls + recordingControls)
+        recordingControls = [dot, elapsed, waveform, pauseButton, stopButton]
+        let status = NSStackView(views: startingControls + [dot, elapsed, waveform])
+        status.spacing = 10
+        let capsule = NSGlassEffectView(wrapping: status, inset: NSEdgeInsets(top: 10, left: 18, bottom: 10, right: 18), cornerRadius: 22)
+        for button in [pauseButton, stopButton] {
+            button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        }
+        let row = NSStackView(views: [capsule, pauseButton, stopButton])
         row.spacing = 10
-        row.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-        row.translatesAutoresizingMaskIntoConstraints = false
-        bar.fill = .meetyBackground
-        bar.shadow = NSShadow()
-        bar.layer?.shadowOpacity = 0.12
-        bar.layer?.shadowRadius = 12
-        bar.layer?.shadowOffset = CGSize(width: 0, height: -2)
-        bar.addSubview(row)
-        pin(row, in: bar, inset: 0)
+        bar.spacing = 10
+        bar.contentView = row
+        capsule.heightAnchor.constraint(equalToConstant: 44).isActive = true
     }
 
     private func buildConsent() {
         let icon = NSImageView(image: NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)!)
-        icon.contentTintColor = .meetySignal
+        icon.contentTintColor = .controlAccentColor
         let title = NSTextField.meety("Recording Started", font: Typography.bodyMedium)
         let header = NSStackView(views: [icon, title])
         header.spacing = 6
@@ -214,9 +206,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        consent.addSubview(stack)
-        pin(stack, in: consent, inset: 12)
+        consent = NSGlassEffectView(wrapping: stack, inset: NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14), cornerRadius: 22)
         done.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: 0).isActive = true
         body.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         consent.isHidden = true
@@ -227,15 +217,6 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     }
 
     private var consentCheckbox: NSButton?
-
-    private func pin(_ child: NSView, in parent: NSView, inset: CGFloat) {
-        NSLayoutConstraint.activate([
-            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: inset),
-            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -inset),
-            child.topAnchor.constraint(equalTo: parent.topAnchor, constant: inset),
-            child.bottomAnchor.constraint(equalTo: parent.bottomAnchor, constant: -inset),
-        ])
-    }
 
     // MARK: Render
 
@@ -251,15 +232,15 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         let showActive = isLive || isBusy || !recorder.segments.isEmpty && phase != .idle
         idle.isHidden = showActive
         active.isHidden = !showActive
-        idleControls.forEach { $0.isHidden = isLive || isBusy }
+        bar.isHidden = !(isLive || isBusy)
         startingControls.forEach { $0.isHidden = !isBusy }
         recordingControls.forEach { $0.isHidden = !isLive }
         if isBusy { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
 
-        pauseButton.title = phase == .paused ? "Resume" : "Pause"
-        pauseButton.image = NSImage(systemSymbolName: phase == .paused ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+        pauseButton.toolTip = phase == .paused ? "Resume recording" : "Pause recording"
+        pauseButton.image = NSImage(systemSymbolName: phase == .paused ? "play.fill" : "pause.fill", accessibilityDescription: pauseButton.toolTip)
         status.stringValue = phase == .paused ? "Paused" : isLive ? "Recording" : progressLabel.stringValue
-        statusDot.fill = phase == .paused ? .meetyInput : .meetySignal
+        statusDot.fill = phase == .paused ? .tertiaryLabelColor : .systemRed
         if titleField.currentEditor() == nil { titleField.stringValue = recorder.title }
         noticeLabel.stringValue = recorder.notice ?? ""
         noticeBanner.isHidden = recorder.notice == nil
@@ -285,37 +266,6 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
         listening.stringValue = phase == .paused ? "Recording paused. Click Resume to continue recording." : "Listening for speech... Speak to see live transcription."
     }
 
-    private func renderRecent() {
-        let meetings = model.meetings
-        recentCount.stringValue = "\(meetings.count) saved"
-        recentList.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if meetings.isEmpty {
-            let empty = CardView()
-            empty.fill = .clear
-            let label = NSTextField.meety("Your first recording will appear here once it is saved.", font: Typography.callout, color: .meetyMutedForeground)
-            label.translatesAutoresizingMaskIntoConstraints = false
-            empty.addSubview(label)
-            pin(label, in: empty, inset: 12)
-            recentList.addArrangedSubview(empty)
-            empty.widthAnchor.constraint(equalTo: recentList.widthAnchor).isActive = true
-            return
-        }
-        for meeting in meetings.prefix(6) {
-            let row = NSButton(title: meeting.title, image: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)!, target: self, action: #selector(openRecent(_:)))
-            row.isBordered = false
-            row.alignment = .left
-            row.imagePosition = .imageTrailing
-            row.imageHugsTitle = false
-            row.font = Typography.body
-            row.contentTintColor = .meetyMutedForeground
-            row.lineBreakMode = .byTruncatingTail
-            row.identifier = .init(meeting.id)
-            row.heightAnchor.constraint(equalToConstant: 40).isActive = true
-            recentList.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: recentList.widthAnchor).isActive = true
-        }
-    }
-
     private func fillDevicePopups() {
         let settings = model.settings
         micPopup.fillMicrophones(preferred: settings.preferredMicDevice)
@@ -336,14 +286,12 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     private func stopDisplayLink() {
         displayLink?.invalidate()
         displayLink = nil
-        micMeter.level = .silent
-        systemMeter.level = .silent
+        waveform.reset()
     }
 
     @objc private func tick() {
         let levels = recorder.levels
-        micMeter.level = levels.microphone
-        systemMeter.level = levels.system
+        waveform.push(max(levels.microphone.rms, levels.system.rms), at: CACurrentMediaTime())
         let clock = Clock.duration(recorder.elapsed())
         if elapsed.stringValue != clock { elapsed.stringValue = clock }
     }
@@ -361,11 +309,6 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     @objc private func micChosen() { model.settings.preferredMicDevice = micPopup.selectedItem?.representedObject as? String }
 
     @objc private func systemChosen() { model.settings.recordSystemAudio = systemPopup.indexOfSelectedItem == 0 }
-
-    @objc private func openRecent(_ sender: NSButton) {
-        guard let id = sender.identifier?.rawValue else { return }
-        model.route = .meeting(id)
-    }
 
     @objc private func dismissNotice() { noticeBanner.isHidden = true }
 
@@ -386,7 +329,7 @@ final class HomeViewController: NSViewController, NSTextFieldDelegate {
     }
 }
 
-private extension Recorder.Phase {
+extension Recorder.Phase {
     var isStarting: Bool { if case .starting = self { true } else { false } }
     var isFailed: Bool { if case .failed = self { true } else { false } }
 }

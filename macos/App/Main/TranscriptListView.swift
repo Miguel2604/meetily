@@ -100,28 +100,25 @@ private final class TranscriptCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         time.font = Typography.timestamp
-        time.textColor = .meetyMutedForeground
+        time.textColor = .secondaryLabelColor
         source.font = Typography.caption
-        source.textColor = .meetyMutedForeground
+        source.textColor = .secondaryLabelColor
         text.font = Typography.body
         text.textColor = .labelColor
         text.isSelectable = true
         textField = text
         let meta = NSStackView(views: [time, source])
-        meta.orientation = .vertical
-        meta.alignment = .leading
-        meta.spacing = 1
+        meta.spacing = 6
         for v in [meta, text] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Time over text, so a narrow inspector keeps the full width for the words.
         NSLayoutConstraint.activate([
             meta.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             meta.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            meta.widthAnchor.constraint(equalToConstant: 68),
-            meta.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -5),
-            text.leadingAnchor.constraint(equalTo: meta.trailingAnchor, constant: 8),
+            text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            text.topAnchor.constraint(equalTo: topAnchor, constant: 5),
-            text.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
+            text.topAnchor.constraint(equalTo: meta.bottomAnchor, constant: 2),
+            text.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
     }
 

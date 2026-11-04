@@ -1,16 +1,26 @@
 import AppKit
 
 #if DEBUG
-/// `MEETY_SNAPSHOT=/path.png` renders the main window's content to a PNG after launch and quits,
-/// so UI changes can be checked without screen-recording permission.
+/// `MEETY_SNAPSHOT=/path.png` captures the front window to a PNG after launch and quits.
+/// `MEETY_APPEARANCE=light|dark` forces the appearance.
 enum DebugSnapshot {
     /// `window` is asked at snapshot time, so a window opened after launch (Settings) can be captured.
     static func scheduleIfRequested(_ window: @escaping () -> NSWindow?) {
-        guard let path = ProcessInfo.processInfo.environment["MEETY_SNAPSHOT"] else { return }
-        let delay = Double(ProcessInfo.processInfo.environment["MEETY_SNAPSHOT_DELAY"] ?? "") ?? 1.5
+        let env = ProcessInfo.processInfo.environment
+        if let name = env["MEETY_APPEARANCE"] { NSApp.appearance = NSAppearance(named: name == "dark" ? .darkAqua : .aqua) }
+        guard let path = env["MEETY_SNAPSHOT"] else { return }
+        let delay = Double(env["MEETY_SNAPSHOT_DELAY"] ?? "") ?? 1.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             defer { exit(0) } // terminate(_:) waits while a sheet is attached
-            guard let view = window()?.contentView?.superview, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            guard let window = window() else { return }
+            // The window server draws Liquid Glass, so cacheDisplay would show it as flat fills.
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l\(window.windowNumber)", path]
+            try? capture.run()
+            capture.waitUntilExit()
+            if capture.terminationStatus == 0, FileManager.default.fileExists(atPath: path) { return }
+            guard let view = window.contentView?.superview, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }

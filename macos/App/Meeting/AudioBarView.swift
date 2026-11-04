@@ -22,7 +22,7 @@ final class AudioBarView: NSView {
         slider.isContinuous = true
         slider.controlSize = .small
         slider.setAccessibilityLabel("Playback position")
-        for label in [time, total] { label.font = Typography.timestamp; label.textColor = .meetyMutedForeground }
+        for label in [time, total] { label.font = Typography.timestamp; label.textColor = .secondaryLabelColor }
         let row = NSStackView(views: [play, time, slider, total])
         row.spacing = 8
         row.translatesAutoresizingMaskIntoConstraints = false

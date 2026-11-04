@@ -25,15 +25,15 @@ final class SummaryPane: SettingsPane {
     private let topP = NSTextField()
     private let pullName = NSTextField()
     private let pullProgress = NSProgressIndicator()
-    private let hint = NSTextField.meety("", font: Typography.caption, color: .meetyMutedForeground)
-    private let status = NSTextField.meety("", font: Typography.callout, color: .meetyMutedForeground)
+    private let hint = NSTextField.meety("", font: Typography.caption, color: .secondaryLabelColor)
+    private let status = NSTextField.meety("", font: Typography.callout, color: .secondaryLabelColor)
     private let language = NSPopUpButton()
     private lazy var pullButton = NSButton(title: "Pull", target: self, action: #selector(pull))
     private lazy var deleteOllama = NSButton(title: "Delete…", target: self, action: #selector(deleteOllamaModel))
     private lazy var testButton = NSButton(title: "Test Connection", target: self, action: #selector(testConnection))
     private lazy var saveButton = NSButton.meety("Save", role: .primary, target: self, action: #selector(save))
     private var formRows: [(String, NSView)] = []
-    private var grid = NSGridView()
+    private var grid = NSView()
 
     init(model: AppModel) {
         self.model = model
@@ -114,7 +114,7 @@ final class SummaryPane: SettingsPane {
         topP.stringValue = config.topP.map { "\($0)" } ?? ""
         let custom = config.provider == .customOpenAI, ollama = config.provider == .ollama
         let visible = [true, true, config.takesKey, custom || ollama, custom, custom, custom, ollama, true, true]
-        // A fresh grid with only this provider's rows: hidden NSGridView rows still take their spacing.
+        // A fresh form with only this provider's rows.
         var rows = zip(formRows, visible).filter(\.1).map(\.0)
         if !SummaryConfig.keyed.contains(config.provider), let index = rows.firstIndex(where: { $0.1 === key }) { rows[index].0 = "API key (optional)" }
         let fresh = form(rows)
@@ -152,7 +152,7 @@ final class SummaryPane: SettingsPane {
 
     private func show(_ message: String, error: Bool = false) {
         status.stringValue = message
-        status.textColor = error ? .meetyDestructive : .meetyMutedForeground
+        status.textColor = error ? .systemRed : .secondaryLabelColor
     }
 
     private var ollamaEndpoint: String? { config.ollamaEndpoint.isEmpty ? nil : config.ollamaEndpoint }

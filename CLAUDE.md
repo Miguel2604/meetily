@@ -12,7 +12,7 @@ Guidance for Claude Code in this repository.
 cd macos
 scripts/test.sh                 # swift test in MeetyKit, then a Debug build of the app
 scripts/build.sh                # xcodegen + Debug build (CONFIG=Release for Release)
-scripts/package.sh              # signed Release build into macos/build/Meety.app (see README)
+scripts/package.sh              # signed Release build into macos/build.noindex/Meety.app (see README)
 (cd MeetyKit && swift test --filter <Suite>)
 ```
 
@@ -24,7 +24,7 @@ XcodeGen is at `~/.local/bin/xcodegen`; `Meety.xcodeproj` is generated, never ed
 macos/
   project.yml   Meety.app target: Info.plist keys, entitlements, main-actor-by-default, hardened runtime
   App/          AppKit UI built in code: AppDelegate, MainMenu, StatusItem, Notifier, AppModel,
-                Design/ (tokens, type, house views), Main/, Recording/, Meeting/, Settings/, Onboarding/
+                Design/ (type, house views), Main/, Recording/, Meeting/, Settings/, Onboarding/
   MeetyKit/     SwiftPM package, no AppKit
     Sources/Core/           GRDB Store, records, Settings (UserDefaults), Keychain, Paths, Download
     Sources/Audio/          devices, mic capture, system tap, DSP, ring buffer, mixer, RecordingWriter
@@ -36,7 +36,7 @@ macos/
 
 ## Conventions
 
-- **AppKit only, in code** (no SwiftUI, storyboards or XIBs). Reuse the house views in `App/Design/` (`NSButton.meety`, `CardView`, `EmptyStateView`, `NSColor.meety*`, `Typography`, `Metrics`).
+- **AppKit only, in code** (no SwiftUI, storyboards or XIBs). Reuse the house views in `App/Design/` (`NSButton.meety` and `.meetyCircle`, `NSGlassEffectView(wrapping:)`, `CardView`, `FormSection`, `EmptyStateView`, `Typography`). Colors are system semantic colors plus the `AccentColor` asset; recording is `systemRed`. Liquid Glass goes on controls and chrome only, never behind transcript, summary or notes text (docs/LIQUID_GLASS_PLAN.md).
 - **State:** `AppModel` and the MeetyKit models are `@Observable`; views bind with `track { }` (in `AppModel.swift`), a `withObservationTracking` loop.
 - **Concurrency:** Swift 6 strict. The app target is main-actor by default; MeetyKit APIs are `nonisolated`, heavy work is `@concurrent`. Real-time audio callbacks never allocate, lock, log or touch actors: they write into the `Synchronization.Atomic` SPSC ring buffer (D7).
 - **Dependencies:** FluidAudio 0.18.2, GRDB, llama.cpp and whisper.cpp xcframeworks. Everything else comes from the SDK. Don't add packages.
@@ -53,7 +53,7 @@ macos/
 
 ## Checking UI without a person (Debug builds)
 
-`MEETY_SNAPSHOT=/path.png` (+ `MEETY_SNAPSHOT_DELAY`) renders the front window to a PNG and exits. `MEETY_DEMO_RECORDING=1` records a synthetic tone with a canned engine. `MEETY_OPEN_MEETING=<id>`, `MEETY_SETTINGS_TAB=0…4`, `MEETY_ONBOARDING=1`, `MEETY_IMPORT=<audio>` open those screens. Each launch logs `window visible N ms after process start` (category `launch`).
+`MEETY_SNAPSHOT=/path.png` (+ `MEETY_SNAPSHOT_DELAY`) captures the front window with `screencapture` (glass included) and exits; `MEETY_APPEARANCE=light|dark` forces the appearance. `MEETY_DEMO_RECORDING=1` records a synthetic tone with a canned engine. `MEETY_OPEN_MEETING=<id>`, `MEETY_SETTINGS_TAB=0…4`, `MEETY_ONBOARDING=1`, `MEETY_IMPORT=<audio>` open those screens. Each launch logs `window visible N ms after process start` (category `launch`).
 
 ## Platform notes
 
