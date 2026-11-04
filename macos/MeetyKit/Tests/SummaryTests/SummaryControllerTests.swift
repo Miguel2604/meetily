@@ -94,6 +94,21 @@ import Testing
         #expect(summary.savedMarkdown == "## Points\n- One")
     }
 
+    @Test func `an edit made just before regenerating survives cancelling the run`() async throws {
+        let summary = controller()
+        await summary.generate(provider: "openai", model: "m", templateID: "standard_meeting", language: "en")
+        let slow = fakeLLM { _, _ in Reply(200, "{}", delay: .seconds(30)) }
+        let again = controller(slow)
+        await again.load()
+        again.markdown = "## Points\n- My edit" // regenerate inside the autosave wait
+        async let run: Void = again.generate(provider: "openai", model: "m", templateID: "standard_meeting", language: "en")
+        while slow.requests.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        await again.cancel()
+        await run
+        #expect(again.markdown == "## Points\n- My edit")
+        #expect(!again.isDirty)
+    }
+
     @Test func `cancelling a regeneration keeps the previous summary`() async throws {
         let summary = controller()
         await summary.generate(provider: "openai", model: "m", templateID: "standard_meeting", language: "en")

@@ -58,6 +58,8 @@ public final class SummaryController {
         guard !isGenerating else { return }
         error = nil
         do {
+            // A failed or cancelled run restores the stored summary, so pending edits must be stored first.
+            if isDirty { try await save() }
             let transcripts = try await store.transcripts(meetingID: meetingID)
             guard !transcripts.isEmpty else { error = "No transcripts available for summary"; return }
             isGenerating = true
