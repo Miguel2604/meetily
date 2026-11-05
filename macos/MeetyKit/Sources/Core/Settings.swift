@@ -30,6 +30,8 @@ public final class Settings {
     /// The `Provider` raw value and model name for the dictationModel cleanup; its key is the provider's Keychain entry.
     public var dictationProvider: String { didSet { defaults.set(dictationProvider, forKey: "dictationProvider") } }
     public var dictationModel: String { didSet { defaults.set(dictationModel, forKey: "dictationModel") } }
+    /// `DictationKey` raw value.
+    public var dictationKey: String { didSet { defaults.set(dictationKey, forKey: "dictationKey") } }
     /// One term per line, as `DictationVocabulary` reads it.
     public var dictationVocabulary: String { didSet { defaults.set(dictationVocabulary, forKey: "dictationVocabulary") } }
 
@@ -57,6 +59,7 @@ public final class Settings {
         dictationCleanup = defaults.string(forKey: "dictationCleanup") ?? "onDevice"
         dictationProvider = defaults.string(forKey: "dictationProvider") ?? "claude"
         dictationModel = defaults.string(forKey: "dictationModel") ?? ""
+        dictationKey = defaults.string(forKey: "dictationKey") ?? "rightOption"
         dictationVocabulary = defaults.string(forKey: "dictationVocabulary") ?? ""
     }
 

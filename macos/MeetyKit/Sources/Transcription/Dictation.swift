@@ -5,6 +5,62 @@ import os
 
 private let log = Logger(subsystem: "com.meetily.ai", category: "dictation")
 
+/// The modifier key that dictates. Only modifiers a hold can't type with, and no Right Shift: the microphone opens on
+/// the press, so it would open for every capital letter.
+public enum DictationKey: String, CaseIterable, Sendable {
+    case rightOption, rightCommand, rightControl, function
+
+    public init(saved: String) { self = Self(rawValue: saved) ?? .rightOption }
+
+    public var keyCode: UInt16 {
+        switch self {
+        case .rightOption: 61
+        case .rightCommand: 54
+        case .rightControl: 62
+        case .function: 63
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .rightOption: "Right Option (⌥)"
+        case .rightCommand: "Right Command (⌘)"
+        case .rightControl: "Right Control (⌃)"
+        case .function: "Fn (🌐)"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .rightOption: "⌥"
+        case .rightCommand: "⌘"
+        case .rightControl: "⌃"
+        case .function: "fn"
+        }
+    }
+
+    // NSEvent modifier flags: the device-independent bit for each modifier, and the device bit for each side.
+    private static let option: UInt = 0x80000, command: UInt = 0x100000, control: UInt = 0x40000
+    private static let shift: UInt = 0x20000, fn: UInt = 0x800000
+
+    private var bits: (held: UInt, group: UInt, otherSide: UInt) {
+        switch self {
+        case .rightOption: (0x40, Self.option, 0x20)
+        case .rightCommand: (0x10, Self.command, 0x08)
+        case .rightControl: (0x2000, Self.control, 0x01)
+        case .function: (Self.fn, Self.fn, 0)
+        }
+    }
+
+    public func isHeld(flags: UInt) -> Bool { flags & bits.held != 0 }
+
+    /// Any other modifier is down, this one's other side included.
+    public func othersDown(flags: UInt) -> Bool {
+        let groups = Self.option | Self.command | Self.control | Self.shift | Self.fn
+        return flags & (groups & ~bits.group | bits.otherSide) != 0
+    }
+}
+
 /// Hold-to-talk on one modifier key held alone (Right Option by default), fed from the app's key monitors.
 /// Typing or another modifier during the hold is a keyboard shortcut, so it cancels. A double tap keeps listening
 /// hands-free until the next press, through typing and shortcuts.
@@ -20,6 +76,8 @@ public struct PushToTalk: Sendable {
     public private(set) var isLocked = false
     private var pressedAt: ContinuousClock.Instant?
     private var tappedAt: ContinuousClock.Instant?
+
+    public init(key: DictationKey) { self.init(keyCode: key.keyCode) }
 
     public init(keyCode: UInt16 = 61, minimumHold: Duration = .milliseconds(300)) {
         self.keyCode = keyCode

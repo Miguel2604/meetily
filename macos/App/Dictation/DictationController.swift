@@ -46,7 +46,7 @@ final class DictationController {
         track { [weak self] in self?.refresh() }
         track { [weak self] in
             guard let self else { return }
-            overlay.show(dictation.phase, locked: ptt.isLocked)
+            overlay.show(dictation.phase, finishKey: ptt.isLocked ? key.symbol : nil)
         }
     }
 
@@ -75,6 +75,8 @@ final class DictationController {
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
+    private var key: DictationKey { DictationKey(saved: model.settings.dictationKey) }
+
     /// Installs the key monitors while dictation is on. Monitors added before the Accessibility grant never see keys,
     /// so this polls for the grant and reinstalls them once it lands.
     func refresh() {
@@ -93,10 +95,10 @@ final class DictationController {
                 self?.refresh()
             }
         }
-        guard enabled != !monitors.isEmpty || (enabled && trusted != monitorsTrusted) else { return }
+        guard enabled != !monitors.isEmpty || (enabled && trusted != monitorsTrusted) || ptt.keyCode != key.keyCode else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
-        ptt = PushToTalk() // a hold that began before the change would cancel the next real one
+        ptt = PushToTalk(key: key) // a hold that began before the change would cancel the next real one
         setPasteLastKey(enabled)
         guard enabled else {
             dictation.cancel()
@@ -121,17 +123,14 @@ final class DictationController {
         if event.type == .keyDown {
             action = ptt.keyDown()
         } else {
-            let flags = event.modifierFlags
-            let device = flags.rawValue // NX_DEVICELALTKEYMASK 0x20, NX_DEVICERALTKEYMASK 0x40
-            action = ptt.flagsChanged(keyCode: event.keyCode, held: device & 0x40 != 0,
-                                      others: !flags.intersection([.command, .control, .shift, .function]).isEmpty || device & 0x20 != 0,
-                                      at: .now)
+            let flags = event.modifierFlags.rawValue
+            action = ptt.flagsChanged(keyCode: event.keyCode, held: key.isHeld(flags: flags), others: key.othersDown(flags: flags), at: .now)
         }
         if let action { Logger(subsystem: "com.meetily.ai", category: "dictation").info("Push to talk: \(String(describing: action), privacy: .public)") }
         switch action {
         case .start:
             start()
-            if dictation.phase != .listening { ptt = PushToTalk() } // it didn't start, so don't wait for a finishing press
+            if dictation.phase != .listening { ptt = PushToTalk(key: key) } // it didn't start, so don't wait for a finishing press
         case .finish:
             Task {
                 do { try await dictation.finish() } catch { overlay.flash("Dictation failed: \(error)") }
@@ -290,10 +289,10 @@ final class DictationOverlay {
         panel.contentView = glass
     }
 
-    func show(_ phase: Dictation.Phase, locked: Bool) {
+    func show(_ phase: Dictation.Phase, finishKey: String?) {
         switch phase {
         case .idle: if flashing == nil { panel.orderOut(nil) }
-        case .listening: present("mic.fill", .systemRed, locked ? "Listening. Press ⌥ again to finish" : "Listening…")
+        case .listening: present("mic.fill", .systemRed, finishKey.map { "Listening. Press \($0) again to finish" } ?? "Listening…")
         case .transcribing: present("waveform", .secondaryLabelColor, "Transcribing…")
         case .cleaning: present("sparkles", .secondaryLabelColor, "Tidying up…")
         }

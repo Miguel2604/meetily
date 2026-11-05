@@ -363,3 +363,51 @@ import Testing
         #expect(d.phase == .idle)
     }
 }
+
+@Suite struct DictationKeyTests {
+    // Device-dependent modifier bits: left/right option 0x20/0x40, command 0x08/0x10, control 0x01/0x2000.
+    let rightOption: UInt = 0x40 | 0x80000, leftOption: UInt = 0x20 | 0x80000
+    let rightCommand: UInt = 0x10 | 0x100000, leftCommand: UInt = 0x08 | 0x100000
+    let rightControl: UInt = 0x2000 | 0x40000
+    let shift: UInt = 0x02 | 0x20000
+    let function: UInt = 0x800000
+
+    @Test func `a saved key reads back, and anything else is Right Option`() {
+        #expect(DictationKey(saved: "rightCommand") == .rightCommand)
+        #expect(DictationKey(saved: "nonsense") == .rightOption)
+        #expect(DictationKey.allCases.count == 4)
+    }
+
+    @Test func `each key knows when it's held`() {
+        #expect(DictationKey.rightOption.isHeld(flags: rightOption))
+        #expect(!DictationKey.rightOption.isHeld(flags: leftOption))
+        #expect(DictationKey.rightCommand.isHeld(flags: rightCommand))
+        #expect(!DictationKey.rightCommand.isHeld(flags: leftCommand))
+        #expect(DictationKey.rightControl.isHeld(flags: rightControl))
+        #expect(DictationKey.function.isHeld(flags: function))
+        #expect(!DictationKey.function.isHeld(flags: rightOption))
+    }
+
+    @Test func `the key's own modifier doesn't count as another one, but its other side does`() {
+        #expect(!DictationKey.rightOption.othersDown(flags: rightOption))
+        #expect(DictationKey.rightOption.othersDown(flags: rightOption | 0x20))
+        #expect(DictationKey.rightOption.othersDown(flags: rightOption | shift))
+        #expect(DictationKey.rightOption.othersDown(flags: rightOption | function))
+        #expect(!DictationKey.rightCommand.othersDown(flags: rightCommand))
+        #expect(DictationKey.rightCommand.othersDown(flags: rightCommand | 0x08))
+        #expect(DictationKey.rightCommand.othersDown(flags: rightCommand | rightOption))
+        #expect(!DictationKey.rightControl.othersDown(flags: rightControl))
+        #expect(DictationKey.rightControl.othersDown(flags: rightControl | 0x01))
+        #expect(!DictationKey.function.othersDown(flags: function))
+        #expect(DictationKey.function.othersDown(flags: function | rightOption))
+        #expect(!DictationKey.function.othersDown(flags: 0))
+    }
+
+    @Test func `push to talk follows the chosen key`() {
+        var ptt = PushToTalk(key: .rightCommand)
+        let t0 = ContinuousClock.now
+        #expect(ptt.flagsChanged(keyCode: 61, held: false, others: false, at: t0) == nil)
+        #expect(ptt.flagsChanged(keyCode: 54, held: true, others: false, at: t0) == .start)
+        #expect(ptt.flagsChanged(keyCode: 54, held: false, others: false, at: t0 + .seconds(1)) == .finish)
+    }
+}

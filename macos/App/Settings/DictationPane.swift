@@ -1,11 +1,13 @@
 import AppKit
 import Core
 import Summary
+import Transcription
 
 /// Push-to-talk dictation: the switch, Accessibility access, and which model tidies the text.
 final class DictationPane: SettingsPane, NSTextViewDelegate {
     private let model: AppModel
-    private lazy var enabled = Self.checkbox("Hold Right Option (⌥) to dictate into any app", false, target: self, action: #selector(enabledChosen(_:)))
+    private lazy var enabled = Self.checkbox("Dictate into any app", false, target: self, action: #selector(enabledChosen(_:)))
+    private let holdKey = NSPopUpButton()
     private let cleanup = NSPopUpButton()
     private let access = NSTextField.meety("", font: Typography.body)
     private lazy var grant = NSButton(title: "Allow…", target: self, action: #selector(grantAccess))
@@ -35,6 +37,9 @@ final class DictationPane: SettingsPane, NSTextViewDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        holdKey.addItems(withTitles: DictationKey.allCases.map(\.title))
+        holdKey.target = self
+        holdKey.action = #selector(keyPicked)
         cleanup.autoenablesItems = false
         cleanup.addItems(withTitles: Self.modes.map(\.1))
         cleanup.item(at: 0)?.isEnabled = DictationCleanup.onDeviceAvailable
@@ -57,8 +62,8 @@ final class DictationPane: SettingsPane, NSTextViewDelegate {
         modelForm = form([("Provider", provider), ("Model", modelBox), ("API key", key)])
         let accessRow = NSStackView(views: [access, grant])
         accessRow.spacing = 8
-        section("Push to talk", [form([("Dictation", enabled), ("Accessibility", accessRow)])],
-                note: "Hold the key, speak, and let go: the text is pasted where you are typing. Double-tap it to keep listening hands-free, then press it once to finish. ⌥⇧V pastes the last dictation again. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records.")
+        section("Push to talk", [form([("Dictation", enabled), ("Hold to talk", holdKey), ("Accessibility", accessRow)])],
+                note: "Hold the key, speak, and let go: the text is pasted where you are typing. Double-tap it to keep listening hands-free, then press it once to finish. ⌥⇧V pastes the last dictation again. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records. If you pick Fn, set “Press 🌐 key to” to Do Nothing in System Settings › Keyboard.")
         section("Cleanup", [form([("Tidy the text with", cleanup)]), modelForm],
                 note: "Fixes punctuation and capitalization, drops filler words and false starts, and keeps the language you spoke. If cleanup fails or takes more than 5 seconds, the text is pasted as heard. Apple Intelligence needs to be on in System Settings and doesn't support every language; a fast hosted model such as Claude Haiku or Mercury on OpenRouter does.")
         vocabularyScroll.borderType = .bezelBorder
@@ -79,6 +84,7 @@ final class DictationPane: SettingsPane, NSTextViewDelegate {
             guard let self else { return }
             let settings = model.settings
             enabled.state = settings.dictationEnabled ? .on : .off
+            holdKey.selectItem(at: DictationKey.allCases.firstIndex(of: DictationKey(saved: settings.dictationKey)) ?? 0)
             cleanup.selectItem(at: Self.modes.firstIndex { $0.0.rawValue == settings.dictationCleanup } ?? 0)
             provider.selectItem(at: Self.providers.firstIndex { $0.0.rawValue == settings.dictationProvider } ?? 0)
             modelBox.stringValue = settings.dictationModel
@@ -105,6 +111,8 @@ final class DictationPane: SettingsPane, NSTextViewDelegate {
         model.settings.dictationEnabled = sender.state == .on
         if sender.state == .on, !model.dictation.accessibilityGranted { model.dictation.requestAccessibility() }
     }
+
+    @objc private func keyPicked() { model.settings.dictationKey = DictationKey.allCases[holdKey.indexOfSelectedItem].rawValue }
 
     @objc private func cleanupChosen() { model.settings.dictationCleanup = Self.modes[cleanup.indexOfSelectedItem].0.rawValue }
 
