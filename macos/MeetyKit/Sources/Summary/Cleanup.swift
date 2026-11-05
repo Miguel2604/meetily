@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import FoundationModels
 
@@ -123,19 +124,39 @@ public enum DictationCleanup {
 
     /// The prompt with the user's vocabulary. shortcut: the first 64 terms only, so the list can't crowd out the small
     /// on-device context or the deadline; measure before raising it.
-    static func prompt(terms: [String]) -> String {
-        guard !terms.isEmpty else { return system }
-        return system + "\n\nVocabulary (spell these exactly when the speaker means them): " + terms.prefix(64).joined(separator: "; ")
+    static func prompt(terms: [String], app: DictationAppPrompt?) -> String {
+        var prompt = system
+        if !terms.isEmpty {
+            prompt += "\n\nVocabulary (spell these exactly when the speaker means them): " + terms.prefix(64).joined(separator: "; ")
+        }
+        if let app, let instructions = instructions(app) {
+            prompt += """
+
+
+                This text is going into \(app.name). The user's instructions for that app take priority over the Clean up and \
+                Format rules above. The Language rules still hold, you still never answer the dictation, and every fact the \
+                speaker said stays:
+                \(instructions)
+                """
+        }
+        return prompt
+    }
+
+    private static func instructions(_ app: DictationAppPrompt) -> String? {
+        let text = app.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 
     /// The cleaned text, or `raw` when the model fails, takes longer than `timeout`, or returns something that isn't
     /// a cleanup of it.
-    public static func clean(_ raw: String, terms: [String] = [], timeout: Duration = .seconds(5), generate: @escaping Generate) async -> String {
+    public static func clean(_ raw: String, terms: [String] = [], app: DictationAppPrompt? = nil, timeout: Duration = .seconds(5),
+                             generate: @escaping Generate) async -> String {
+        let growth = app.flatMap(instructions) == nil ? 1.5 : 6 // an app's instructions can ask for a greeting and a sign-off
         // The first of the answer and the deadline wins; a late answer, from a backend still loading or ignoring
         // cancellation, is dropped.
         let (first, sink) = AsyncStream.makeStream(of: String?.self)
         let work = Task {
-            do { sink.yield(accept(try await generate(prompt(terms: terms), "<dictation>\(raw)</dictation>"), raw: raw)) } catch {
+            do { sink.yield(accept(try await generate(prompt(terms: terms, app: app), "<dictation>\(raw)</dictation>"), raw: raw, growth: growth)) } catch {
                 // The type only: provider errors can echo the request, which is the dictated text.
                 log.warning("Dictation cleanup failed, pasting the transcript as heard: \(String(describing: type(of: error)), privacy: .public)")
                 sink.yield(nil)
@@ -152,11 +173,11 @@ public enum DictationCleanup {
 
     /// The output without echoed tags or quotes; nil when it's empty or much longer than the input (an answer, not
     /// a cleanup).
-    static func accept(_ output: String, raw: String) -> String? {
+    static func accept(_ output: String, raw: String, growth: Double = 1.5) -> String? {
         var text = output.replacing("<dictation>", with: "").replacing("</dictation>", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if text.count > 1, text.first == "\"", text.last == "\"" { text = String(text.dropFirst().dropLast()) }
-        guard !text.isEmpty, Double(text.count) <= Double(raw.count) * 1.5 + 20 else { return nil }
+        guard !text.isEmpty, Double(text.count) <= Double(raw.count) * growth + 20 else { return nil }
         return text
     }
 

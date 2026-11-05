@@ -222,6 +222,38 @@ public final class Store: Sendable {
         }
     }
 
+    // MARK: Dictation history
+
+    static let dictationRetention: TimeInterval = 7 * 86_400
+
+    /// Timestamps sort as text: they're all written in one format, in UTC.
+    private static func dictationCutoff(_ now: Date) -> String { Timestamp.string(from: now - dictationRetention) }
+
+    public func saveDictation(heard: String, text: String, app: String?, at date: Date = Date()) async throws {
+        try await pool.write { db in
+            try db.execute(sql: "INSERT INTO dictations (created_at, app, heard, text) VALUES (?, ?, ?, ?)",
+                           arguments: [Timestamp.string(from: date), app, heard, text])
+            try db.execute(sql: "DELETE FROM dictations WHERE created_at < ?", arguments: [Self.dictationCutoff(date)])
+        }
+    }
+
+    /// The last seven days, newest first.
+    public func dictations(now: Date = Date()) async throws -> [DictationEntry] {
+        try await pool.read { db in
+            try DictationEntry.fetchAll(db, sql: "SELECT * FROM dictations WHERE created_at >= ? ORDER BY created_at DESC, id DESC",
+                                        arguments: [Self.dictationCutoff(now)])
+        }
+    }
+
+    /// Runs at launch, so entries expire even with history turned off.
+    public func pruneDictations(now: Date = Date()) async throws {
+        try await pool.write { try $0.execute(sql: "DELETE FROM dictations WHERE created_at < ?", arguments: [Self.dictationCutoff(now)]) }
+    }
+
+    public func deleteDictations() async throws {
+        try await pool.write { try $0.execute(sql: "DELETE FROM dictations") }
+    }
+
     // MARK: Settings rows
 
     public func modelConfig() async throws -> ModelConfig? {

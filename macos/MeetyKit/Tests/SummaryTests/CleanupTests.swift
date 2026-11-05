@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+import Core
 @testable import Summary
 
 @Suite struct CleanupTests {
@@ -131,5 +132,41 @@ struct RealCleanupTests {
             return "Hi."
         }
         #expect(seen.withLock { $0 } == DictationCleanup.system)
+    }
+}
+
+@Suite struct DictationAppPromptTests {
+    let slack = DictationAppPrompt(bundleID: "com.tinyspeck.slackmacgap", name: "Slack", instructions: "Casual, no period at the end.")
+
+    @Test func `the app's instructions reach the model after the rules they override`() async {
+        let seen = Mutex<String?>(nil)
+        _ = await DictationCleanup.clean("hi", terms: ["Meety"], app: slack) { system, _ in
+            seen.withLock { $0 = system }
+            return "hi"
+        }
+        let prompt = seen.withLock { $0 } ?? ""
+        #expect(prompt.hasPrefix(DictationCleanup.system))
+        #expect(prompt.contains("Slack"))
+        #expect(prompt.contains("Casual, no period at the end."))
+        #expect(prompt.contains("Meety"))
+    }
+
+    @Test func `blank instructions change nothing`() async {
+        let seen = Mutex<String?>(nil)
+        let blank = DictationAppPrompt(bundleID: "a", name: "A", instructions: "  \n")
+        _ = await DictationCleanup.clean("hi", app: blank) { system, _ in
+            seen.withLock { $0 = system }
+            return "hi"
+        }
+        #expect(seen.withLock { $0 } == DictationCleanup.system)
+    }
+
+    @Test func `an app's instructions may lengthen the text, within reason`() async {
+        let raw = "tell sarah im late"
+        let email = "Hi Sarah,\n\nJust letting you know that I'm running a little late today.\n\nBest,\nMiguel"
+        #expect(await DictationCleanup.clean(raw) { _, _ in email } == raw)
+        #expect(await DictationCleanup.clean(raw, app: slack) { _, _ in email } == email)
+        let essay = String(repeating: "An answer, not a cleanup. ", count: 20)
+        #expect(await DictationCleanup.clean(raw, app: slack) { _, _ in essay } == raw)
     }
 }

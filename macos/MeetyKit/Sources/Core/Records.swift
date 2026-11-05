@@ -113,3 +113,18 @@ public struct SearchResult: Sendable, Hashable {
     public var matchContext: String
     public var timestamp: String
 }
+
+/// One pasted dictation in the opt-in history: `heard` is the transcript, `text` what went into the app.
+public struct DictationEntry: Codable, Sendable, Hashable, Identifiable, FetchableRecord {
+    public var id: Int64
+    public var createdAt: String
+    public var app: String?
+    public var heard: String
+    public var text: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, app, heard, text, createdAt = "created_at"
+    }
+
+    public var createdDate: Date? { Timestamp.parse(createdAt) }
+}

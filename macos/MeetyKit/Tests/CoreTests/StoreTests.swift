@@ -19,7 +19,7 @@ func segment(_ text: String, _ start: Double) -> NewSegment {
 
     @Test func `fresh database gets the sqlx schema and migration rows`() throws {
         let versions = try store.pool.read { try Int64.fetchAll($0, sql: "SELECT version FROM _sqlx_migrations ORDER BY version") }
-        #expect(versions.count == 10)
+        #expect(versions.count == 11)
         #expect(versions.first == 20250916100000)
         let columns = try store.pool.read { try $0.columns(in: "transcripts").map(\.name) }
         #expect(columns.contains("speaker"))
@@ -140,12 +140,48 @@ func segment(_ text: String, _ start: Double) -> NewSegment {
         }
         let store = try Store(path: dir.appending(path: "meeting_minutes.sqlite").path)
         let versions = try await store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM _sqlx_migrations") }
-        #expect(versions == 10)
+        #expect(versions == 11)
         let meetings = try await store.meetings()
         #expect(!meetings.isEmpty)
         let transcripts = try await store.transcripts(meetingID: meetings[0].id)
         #expect(!transcripts.isEmpty)
         _ = try await store.summaryProcess(meetingID: meetings[0].id)
         _ = try await store.modelConfig()
+    }
+}
+
+@Suite struct DictationHistoryTests {
+    @Test func `entries come back newest first, with what was heard and what was pasted`() async throws {
+        let store = try tempStore()
+        try await store.saveDictation(heard: "um first", text: "First.", app: "Slack", at: Date(timeIntervalSince1970: 1_000))
+        try await store.saveDictation(heard: "second", text: "Second.", app: nil, at: Date(timeIntervalSince1970: 2_000))
+        let entries = try await store.dictations(now: Date(timeIntervalSince1970: 3_000))
+        #expect(entries.map(\.text) == ["Second.", "First."])
+        #expect(entries.last?.heard == "um first")
+        #expect(entries.last?.app == "Slack")
+        #expect(entries.first?.app == nil)
+        #expect(entries.last?.createdDate == Date(timeIntervalSince1970: 1_000))
+    }
+
+    @Test func `entries past seven days disappear, from reads and from the file`() async throws {
+        let store = try tempStore()
+        let now = Date(timeIntervalSince1970: 100_000_000)
+        try await store.saveDictation(heard: "old", text: "Old.", app: nil, at: now - 8 * 86_400)
+        try await store.saveDictation(heard: "new", text: "New.", app: nil, at: now - 6 * 86_400)
+        #expect(try await store.dictations(now: now).map(\.text) == ["New."])
+        try await store.pruneDictations(now: now)
+        let left = try await store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM dictations") }
+        #expect(left == 1)
+    }
+
+    @Test func `saving prunes too, and delete all empties it`() async throws {
+        let store = try tempStore()
+        let now = Date(timeIntervalSince1970: 100_000_000)
+        try await store.saveDictation(heard: "old", text: "Old.", app: nil, at: now - 8 * 86_400)
+        try await store.saveDictation(heard: "new", text: "New.", app: nil, at: now)
+        let left = try await store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM dictations") }
+        #expect(left == 1)
+        try await store.deleteDictations()
+        #expect(try await store.dictations(now: now).isEmpty)
     }
 }

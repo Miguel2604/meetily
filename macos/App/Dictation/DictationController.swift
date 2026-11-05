@@ -30,7 +30,9 @@ final class DictationController {
         },
         engine: { [model] in try await model.transcriptionEngine() },
         clean: { [weak self] raw in await self?.clean(raw) ?? raw },
-        deliver: { [weak self] text in self?.paste(text) })
+        deliver: { [weak self] text in self?.deliver(text) })
+    /// The transcript behind the dictation being cleaned. Dictations clean and deliver one at a time, so it's the right one.
+    @ObservationIgnored private var heard = ""
     @ObservationIgnored private var pasteLastKey: EventHotKeyRef?
     private static weak var active: DictationController?
     private static let pasteLastHandler: Void = {
@@ -44,9 +46,21 @@ final class DictationController {
     init(model: AppModel) {
         self.model = model
         track { [weak self] in self?.refresh() }
+        Task { [store = model.store] in try? await store.pruneDictations() }
         track { [weak self] in
             guard let self else { return }
             overlay.show(dictation.phase, finishKey: ptt.isLocked ? key.symbol : nil)
+        }
+    }
+
+    private func deliver(_ text: String) {
+        paste(text)
+        guard model.settings.dictationHistory else { return }
+        let (heard, app) = (heard, NSWorkspace.shared.frontmostApplication?.localizedName)
+        Task { [store = model.store] in
+            do { try await store.saveDictation(heard: heard, text: text, app: app) } catch {
+                Logger(subsystem: "com.meetily.ai", category: "dictation").warning("History save failed: \(String(describing: type(of: error)), privacy: .public)")
+            }
         }
     }
 
@@ -151,22 +165,25 @@ final class DictationController {
     }
 
     private func clean(_ heard: String) async -> String {
+        self.heard = heard
         let vocabulary = DictationVocabulary(model.settings.dictationVocabulary)
         let raw = vocabulary.correct(heard)
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let app = model.settings.dictationAppPrompts.first { $0.bundleID == front }
         switch CleanupMode(rawValue: model.settings.dictationCleanup) ?? .onDevice {
         case .off:
             return raw
         case .onDevice:
             guard DictationCleanup.onDeviceAvailable else { return raw }
-            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.onDevice)
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, app: app, generate: DictationCleanup.onDevice)
         case .summaryModel:
             guard let config = try? await SummaryConfig.load(store: model.store) else { return raw }
-            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, app: app, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
         case .dictationModel:
             let name = model.settings.dictationModel
             guard let provider = Provider(id: model.settings.dictationProvider), !name.isEmpty else { return raw }
             let config = await SummaryConfig.dictation(provider: provider, model: name)
-            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, app: app, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
         }
     }
 }

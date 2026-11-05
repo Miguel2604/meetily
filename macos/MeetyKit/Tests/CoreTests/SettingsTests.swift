@@ -102,3 +102,19 @@ import GRDB
         for p in ["openai", "claude", "custom-openai"] { try keychain.set(nil, for: p) }
     }
 }
+
+@MainActor @Suite struct DictationAppPromptSettingsTests {
+    @Test func `per-app prompts survive a restart, and a damaged value reads as none`() throws {
+        let name = "test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let nothing = FileManager.default.temporaryDirectory.appending(path: name) // no Tauri store to import
+        let settings = Settings(defaults: defaults, importFrom: nothing)
+        #expect(settings.dictationAppPrompts.isEmpty)
+        let slack = DictationAppPrompt(bundleID: "com.tinyspeck.slackmacgap", name: "Slack", instructions: "Casual.")
+        settings.dictationAppPrompts = [slack]
+        #expect(Settings(defaults: defaults, importFrom: nothing).dictationAppPrompts == [slack])
+        defaults.set(Data("not json".utf8), forKey: "dictationAppPrompts")
+        #expect(Settings(defaults: defaults, importFrom: nothing).dictationAppPrompts.isEmpty)
+    }
+}

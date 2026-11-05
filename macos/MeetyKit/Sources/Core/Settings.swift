@@ -30,6 +30,12 @@ public final class Settings {
     /// The `Provider` raw value and model name for the dictationModel cleanup; its key is the provider's Keychain entry.
     public var dictationProvider: String { didSet { defaults.set(dictationProvider, forKey: "dictationProvider") } }
     public var dictationModel: String { didSet { defaults.set(dictationModel, forKey: "dictationModel") } }
+    /// Keep pasted dictations in the database for seven days. Off by default: dictated text stays out of files unless asked.
+    public var dictationHistory: Bool { didSet { defaults.set(dictationHistory, forKey: "dictationHistory") } }
+    /// How cleanup should write for particular apps.
+    public var dictationAppPrompts: [DictationAppPrompt] {
+        didSet { defaults.set(try? JSONEncoder().encode(dictationAppPrompts), forKey: "dictationAppPrompts") }
+    }
     /// `DictationKey` raw value.
     public var dictationKey: String { didSet { defaults.set(dictationKey, forKey: "dictationKey") } }
     /// One term per line, as `DictationVocabulary` reads it.
@@ -59,6 +65,8 @@ public final class Settings {
         dictationCleanup = defaults.string(forKey: "dictationCleanup") ?? "onDevice"
         dictationProvider = defaults.string(forKey: "dictationProvider") ?? "claude"
         dictationModel = defaults.string(forKey: "dictationModel") ?? ""
+        dictationHistory = defaults.bool(forKey: "dictationHistory")
+        dictationAppPrompts = defaults.data(forKey: "dictationAppPrompts").flatMap { try? JSONDecoder().decode([DictationAppPrompt].self, from: $0) } ?? []
         dictationKey = defaults.string(forKey: "dictationKey") ?? "rightOption"
         dictationVocabulary = defaults.string(forKey: "dictationVocabulary") ?? ""
     }
@@ -83,5 +91,18 @@ public final class Settings {
             }
         }
         // shortcut: notifications.json (~/Library/Application Support/meetily) is not imported; its defaults match ours.
+    }
+}
+
+/// The user's instructions for dictating into one app.
+public struct DictationAppPrompt: Codable, Sendable, Equatable {
+    public var bundleID: String
+    public var name: String
+    public var instructions: String
+
+    public init(bundleID: String, name: String, instructions: String) {
+        self.bundleID = bundleID
+        self.name = name
+        self.instructions = instructions
     }
 }
