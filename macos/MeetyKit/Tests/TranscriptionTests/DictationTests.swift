@@ -212,6 +212,25 @@ import Testing
         #expect(!Dictation.isSilent(tone(1, rate: rate).map { $0 * 0.05 }, rate: rate)) // a quiet mic still counts
     }
 
+    @Test func `a long pause keeps only its ends, and everything else stays`() {
+        let rate = 48_000.0
+        func seconds(_ samples: [Float]) -> Double { Double(samples.count) / rate }
+        let speech = tone(1, rate: rate)
+        let room = (0..<Int(10 * rate)).map { i in 0.002 * Float(sin(Double(i) * 0.37)) } // steady -57 dBFS room noise
+        let digital = silence(10, rate: rate)
+        for pause in [room, digital] {
+            let capped = Dictation.cappingPauses(speech + pause + speech, rate: rate)
+            #expect(abs(seconds(capped) - 4.8) < 0.1)
+        }
+        let trailing = Dictation.cappingPauses(speech + digital, rate: rate)
+        #expect(abs(seconds(trailing) - 3.5) < 0.1)
+        let short = speech + silence(2, rate: rate) + speech
+        #expect(Dictation.cappingPauses(short, rate: rate).count == short.count)
+        #expect(Dictation.cappingPauses(speech, rate: rate).count == speech.count)
+        #expect(Dictation.cappingPauses(digital, rate: rate).count == digital.count) // nothing heard: untouched
+        #expect(Dictation.cappingPauses([], rate: rate).isEmpty)
+    }
+
     @Test func `a second start while listening is ignored`() async throws {
         let delivered = Delivered()
         var captures = 0

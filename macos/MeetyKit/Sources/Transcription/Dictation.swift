@@ -256,10 +256,54 @@ public final class Dictation {
         }
     }
 
+    /// `samples` with each long pause cut to its first 2.5 s and last 0.3 s (a trailing one to its first 2.5 s), so a
+    /// hands-free dictation left waiting doesn't feed the model the silence it invents text in. Quiet means within 4 dB of
+    /// a noise floor that falls at once and rises 3 dB per second, or under -70 dBFS, and never over -35 dBFS. A clip with
+    /// nothing above it stays whole. The rules are Hex's, plus that ceiling.
+    nonisolated static func cappingPauses(_ samples: [Float], rate: Double) -> [Float] {
+        let frame = Int(rate * 0.02), keepHead = Int(rate * 2.5), keepTail = Int(rate * 0.3)
+        guard frame > 0 else { return samples }
+        var output: [Float] = []
+        output.reserveCapacity(samples.count)
+        var floor: Float?
+        var pause: Range<Int>?
+        var heard = false
+        func closePause(trailing: Bool) {
+            guard let run = pause else { return }
+            pause = nil
+            if run.count <= keepHead + (trailing ? 0 : keepTail) {
+                output += samples[run]
+            } else {
+                output += samples[run.lowerBound..<(run.lowerBound + keepHead)]
+                if !trailing { output += samples[(run.upperBound - keepTail)..<run.upperBound] }
+            }
+        }
+        for start in stride(from: 0, to: samples.count, by: frame) {
+            let end = min(start + frame, samples.count)
+            let slice = samples[start..<end]
+            let mean = slice.reduce(0, +) / Float(slice.count)
+            let power = slice.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(slice.count)
+            let level = 10 * log10(max(power, 1e-12))
+            let bottom = floor.map { min(level, $0 + 0.06) } ?? level // 0.06 dB a frame is 3 dB a second
+            floor = bottom
+            if level < -35, level <= max(bottom + 4, -70) { // the ceiling: a clip that starts mid-word starts the floor high
+                pause = (pause?.lowerBound ?? start)..<end
+            } else {
+                heard = true
+                closePause(trailing: false)
+                output += slice
+            }
+        }
+        guard heard else { return samples }
+        closePause(trailing: true)
+        return output
+    }
+
     /// The capture at the model's rate, or nil when it's silent. Off the main actor: a hands-free capture can be long.
     @concurrent private static func prepared(_ samples: [Float]) async throws -> [Float]? {
         guard !isSilent(samples, rate: MicrophoneCapture.sampleRate) else { return nil }
-        return try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate).process(samples)
+        return try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate)
+            .process(cappingPauses(samples, rate: MicrophoneCapture.sampleRate))
     }
 
     /// Stops the microphone and returns everything it captured.
