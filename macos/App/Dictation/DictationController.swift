@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Audio
+import Carbon.HIToolbox
 import Observation
 import os
 import Summary
@@ -29,9 +30,16 @@ final class DictationController {
         },
         engine: { [model] in try await model.transcriptionEngine() },
         clean: { [weak self] raw in await self?.clean(raw) ?? raw },
-        deliver: { [weak self] text in
-            if !Paste.insert(text) { self?.overlay.flash("Copied. Press ⌘V, or allow Accessibility in Settings › Dictation to paste") }
-        })
+        deliver: { [weak self] text in self?.paste(text) })
+    @ObservationIgnored private var pasteLastKey: EventHotKeyRef?
+    private static weak var active: DictationController?
+    private static let pasteLastHandler: Void = {
+        var pressed = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+            MainActor.assumeIsolated { DictationController.active?.pasteLast() }
+            return noErr
+        }, 1, &pressed, nil, nil)
+    }()
 
     init(model: AppModel) {
         self.model = model
@@ -40,6 +48,26 @@ final class DictationController {
             guard let self else { return }
             overlay.show(dictation.phase, locked: ptt.isLocked)
         }
+    }
+
+    /// Pastes the last dictation again; the way back to one that landed nowhere, since the clipboard is restored.
+    func pasteLast() {
+        if let text = Paste.last { paste(text) }
+    }
+
+    private func paste(_ text: String) {
+        if !Paste.insert(text) { overlay.flash("Copied. Press ⌘V, or allow Accessibility in Settings › Dictation to paste") }
+    }
+
+    /// ⌥⇧V, as a Carbon hot key: it needs no permission and the V never reaches the app in front.
+    private func setPasteLastKey(_ on: Bool) {
+        if let pasteLastKey { UnregisterEventHotKey(pasteLastKey) }
+        pasteLastKey = nil
+        guard on else { return }
+        Self.active = self
+        _ = Self.pasteLastHandler
+        RegisterEventHotKey(UInt32(kVK_ANSI_V), UInt32(optionKey | shiftKey), EventHotKeyID(signature: 0x4D54_4C59, id: 1),
+                            GetApplicationEventTarget(), 0, &pasteLastKey)
     }
 
     /// Asks for Accessibility with the system prompt (which links to System Settings).
@@ -69,12 +97,13 @@ final class DictationController {
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
         ptt = PushToTalk() // a hold that began before the change would cancel the next real one
+        setPasteLastKey(enabled)
         guard enabled else {
             dictation.cancel()
             return
         }
         monitorsTrusted = trusted
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
+        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] in self?.handle($0) }) { monitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] in self?.handle($0); return $0 }) { monitors.append(local) }
         Task { [model] in // warm both models now, never at the first dictation (D9)
@@ -86,6 +115,8 @@ final class DictationController {
     private func handle(_ event: NSEvent) {
         // Our own ⌘V paste would otherwise read as typing and cancel a dictation already under way.
         guard event.cgEvent?.getIntegerValueField(.eventSourceUnixProcessID) != Int64(getpid()) else { return }
+        if event.type != .flagsChanged { Paste.inputHappened() }
+        guard event.type == .keyDown || event.type == .flagsChanged else { return }
         let action: PushToTalk.Action?
         if event.type == .keyDown {
             action = ptt.keyDown()
@@ -143,9 +174,24 @@ final class DictationController {
 enum Paste {
     /// The clipboard from before a paste whose restore is still pending, and the change count right after that paste.
     private static var pending: (saved: [NSPasteboardItem], ours: Int, restore: Task<Void, Never>)?
+    /// The last dictation, for Paste Last. In memory only: dictated text never goes to disk.
+    private(set) static var last: String?
+    /// The app and the text of the last insert, while nothing has been typed or clicked since.
+    private static var continuation: (app: pid_t?, text: String)?
+
+    static func inputHappened() { continuation = nil }
 
     /// False when Accessibility is off: the text is left on the clipboard to paste by hand.
-    @discardableResult static func insert(_ text: String) -> Bool {
+    @discardableResult static func insert(_ dictated: String) -> Bool {
+        last = dictated
+        let front = NSWorkspace.shared.frontmostApplication
+        let text = continuation.flatMap { $0.app == front?.processIdentifier ? DictationText.joined(after: $0.text, dictated) : nil } ?? dictated
+        let trusted = AXIsProcessTrusted()
+        if trusted { continuation = (front?.processIdentifier, text) }
+        if trusted, losesPaste(front) {
+            type(text)
+            return true
+        }
         let board = NSPasteboard.general
         pending?.restore.cancel()
         // A paste inside the previous one's restore window keeps the original clipboard, unless the user copied since.
@@ -154,7 +200,7 @@ enum Paste {
         board.clearContents()
         board.setString(text, forType: .string)
         board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType")) // clipboard managers skip it
-        guard AXIsProcessTrusted() else { return false }
+        guard trusted else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: down) // 9: V
@@ -173,6 +219,35 @@ enum Paste {
         }
         pending = (saved, ours, restore)
         return true
+    }
+
+    private static func losesPaste(_ app: NSRunningApplication?) -> Bool {
+        guard let frameworks = app?.bundleURL?.appending(path: "Contents/Frameworks") else { return false }
+        let manager = FileManager.default
+        let versions = ((try? manager.contentsOfDirectory(atPath: frameworks.path)) ?? [])
+            .filter { $0.hasSuffix(" Framework.framework") }
+            .flatMap { (try? manager.contentsOfDirectory(atPath: frameworks.appending(path: "\($0)/Versions").path)) ?? [] }
+        return DictationText.losesPaste(frameworkVersions: versions)
+    }
+
+    /// Types `text` as synthetic key events; the clipboard stays as it is.
+    private static func type(_ text: String) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        for stroke in DictationText.strokes(text) {
+            for down in [true, false] {
+                let event: CGEvent?
+                switch stroke {
+                case .text(let units):
+                    event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
+                    event?.flags = [] // a held dictation key mustn't change what the text means
+                    event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+                case .lineBreak:
+                    event = CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: down) // 36: Return
+                    event?.flags = .maskShift // a plain Return would send a chat message
+                }
+                event?.post(tap: .cghidEventTap)
+            }
+        }
     }
 
     private static func snapshot(_ board: NSPasteboard) -> [NSPasteboardItem] {

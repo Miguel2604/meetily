@@ -93,6 +93,40 @@ import Testing
     }
 }
 
+@Suite struct DictationTextTests {
+    @Test func `a dictation right after another gets a space when it needs one`() {
+        #expect(DictationText.joined(after: "Send it.", "Then call.") == " Then call.")
+        #expect(DictationText.joined(after: "Send it", "to Sarah") == " to Sarah")
+        #expect(DictationText.joined(after: "Send it\n", "Then call.") == "Then call.")
+        #expect(DictationText.joined(after: "Send it ", "Then call.") == "Then call.")
+        #expect(DictationText.joined(after: "(", "note") == "note")
+        #expect(DictationText.joined(after: "Send it", ", then call") == ", then call")
+        #expect(DictationText.joined(after: "Send it", "") == "")
+    }
+
+    @Test func `only Chromium 155 and 156 lose a paste`() {
+        #expect(DictationText.losesPaste(frameworkVersions: ["156.0.8078.74", "Current"]))
+        #expect(DictationText.losesPaste(frameworkVersions: ["155.0.1.2"]))
+        #expect(DictationText.losesPaste(frameworkVersions: ["157.0.1.2", "156.0.1.2"])) // a staged update
+        #expect(!DictationText.losesPaste(frameworkVersions: ["157.0.1.2"]))
+        #expect(!DictationText.losesPaste(frameworkVersions: ["154.0.1.2"]))
+        #expect(!DictationText.losesPaste(frameworkVersions: ["A", "Current"])) // Electron
+        #expect(!DictationText.losesPaste(frameworkVersions: ["156.0"]))
+        #expect(!DictationText.losesPaste(frameworkVersions: ["156.x.1.2"]))
+        #expect(!DictationText.losesPaste(frameworkVersions: []))
+    }
+
+    @Test func `typing splits long text, keeps surrogate pairs whole and shift-returns line breaks`() {
+        #expect(DictationText.strokes("") == [])
+        #expect(DictationText.strokes("hi\nyo") == [.text(Array("hi".utf16)), .lineBreak, .text(Array("yo".utf16))])
+        #expect(DictationText.strokes("a\r\nb\n\n") == [.text(Array("a".utf16)), .lineBreak, .text(Array("b".utf16)), .lineBreak, .lineBreak])
+        let strokes = DictationText.strokes(String(repeating: "x", count: 19) + "😀" + "y")
+        #expect(strokes == [.text(Array(String(repeating: "x", count: 19).utf16)), .text(Array("😀y".utf16))])
+        let long = DictationText.strokes(String(repeating: "z", count: 45))
+        #expect(long.count == 3)
+    }
+}
+
 @MainActor @Suite struct DictationTests {
     final class Delivered { var texts: [String] = [] }
 

@@ -56,6 +56,53 @@ public struct PushToTalk: Sendable {
     }
 }
 
+/// How a dictation goes into another app. The rules are Hex's.
+public enum DictationText {
+    /// One synthetic key event when typing instead of pasting.
+    public enum Stroke: Sendable, Equatable { case text([UInt16]), lineBreak }
+
+    /// `next` as it should land right after `previous`, with a space when the two would otherwise run together.
+    public static func joined(after previous: String, _ next: String) -> String {
+        guard let last = previous.last, let first = next.first, !last.isWhitespace, !"([{".contains(last),
+              !first.isWhitespace, !",.?!;:)]}".contains(first) else { return next }
+        return " " + next
+    }
+
+    /// Chromium 155 and 156 on macOS can drop a ⌘V that races their pasteboard notification, however long the wait
+    /// first (fixed in 157). `frameworkVersions` are the folders in the app's framework `Versions`; any version present
+    /// counts, so a staged update is covered, and Electron's `A` never matches.
+    public static func losesPaste(frameworkVersions: [String]) -> Bool {
+        frameworkVersions.contains { version in
+            let parts = version.split(separator: ".", omittingEmptySubsequences: false)
+            return parts.count == 4 && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
+                && (parts[0] == "155" || parts[0] == "156")
+        }
+    }
+
+    /// `text` as key events of at most 20 UTF-16 units, never splitting a character. Line breaks stay their own stroke,
+    /// so they can go as Shift-Return and not send a chat message.
+    public static func strokes(_ text: String) -> [Stroke] {
+        var strokes: [Stroke] = []
+        var units: [UInt16] = []
+        func flush() {
+            if !units.isEmpty { strokes.append(.text(units)) }
+            units = []
+        }
+        for character in text {
+            if character.isNewline {
+                flush()
+                strokes.append(.lineBreak)
+                continue
+            }
+            let next = Array(String(character).utf16)
+            if units.count + next.count > 20 { flush() }
+            units += next
+        }
+        flush()
+        return strokes
+    }
+}
+
 /// Push-to-talk dictation: capture while the key is held, then transcribe, clean up and deliver the text. The next
 /// dictation can start while the previous one is still processing; deliveries keep the order they were spoken in.
 @MainActor @Observable
