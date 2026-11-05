@@ -104,6 +104,10 @@ struct RealCleanupTests {
         #expect(vocabulary.correct("nothing to fix") == "nothing to fix")
     }
 
+    @Test func `a match the regex folds differently from lowercasing is still corrected`() {
+        #expect(DictationVocabulary("Road: straße").correct("the STRASSE here") == "the Road here")
+    }
+
     @Test func `an empty list changes nothing`() {
         #expect(DictationVocabulary("").terms.isEmpty)
         #expect(DictationVocabulary("").correct("as heard") == "as heard")

@@ -107,6 +107,9 @@ public enum DictationText {
 /// dictation can start while the previous one is still processing; deliveries keep the order they were spoken in.
 @MainActor @Observable
 public final class Dictation {
+    /// One finishing capture; `cut` is what it had heard if a new press ended its tail early.
+    private final class Tail { var cut: [Float]? }
+
     public enum Phase: Sendable, Equatable { case idle, listening, transcribing, cleaning }
 
     /// Listening wins; otherwise the stage of the dictation being processed.
@@ -129,10 +132,8 @@ public final class Dictation {
     @ObservationIgnored private var queue: Task<Void, Never>?
     /// Bumped by `cancel`, so dictations already processing drop their results.
     @ObservationIgnored private var generation = 0
-    /// The capture is finishing, in its tail after the release.
-    @ObservationIgnored private var tailing = false
-    /// What a tail cut short had captured, for the `finish` still waiting on it.
-    @ObservationIgnored private var cut: [Float]?
+    /// The capture still listening through its tail after the release.
+    @ObservationIgnored private var tailing: Tail?
 
     /// `capture` starts a 48 kHz microphone; `engine` hands out the prepared model; `clean` never fails (it falls
     /// back to its input); `deliver` puts the text where the user is typing.
@@ -146,9 +147,9 @@ public final class Dictation {
 
     /// Starts listening. Ignored while already listening; throws when the microphone fails to start.
     public func start() throws {
-        if tailing { // a press during the tail ends that clip now, so this one isn't lost
-            cut = stopCapture()
-            tailing = false
+        if let tailing { // a press during the tail ends that clip now, so this one isn't lost
+            tailing.cut = stopCapture()
+            self.tailing = nil
         }
         guard source == nil else { return log.info("Dictation: start ignored, still listening") }
         let source = try capture()
@@ -170,14 +171,13 @@ public final class Dictation {
     /// Stops listening and drops every dictation still processing, so none of them is pasted.
     public func cancel() {
         generation += 1
-        tailing = false
-        cut = nil
+        tailing = nil
         discard()
     }
 
     /// Stops listening and throws away this capture only; dictations already processing still paste.
     public func discard() {
-        guard !tailing else { return } // that capture is finishing
+        guard tailing == nil else { return } // that capture is finishing
         loading?.cancel()
         loading = nil
         _ = stopCapture()
@@ -195,12 +195,12 @@ public final class Dictation {
         processing += 1
         stage = .transcribing
         defer { processing -= 1 }
-        tailing = true
-        await waitForTail()
+        let mine = Tail()
+        tailing = mine
+        await wait(for: mine)
         guard id == generation else { return nil }
-        let samples = cut ?? stopCapture()
-        cut = nil
-        tailing = false
+        let samples = mine.cut ?? stopCapture()
+        if tailing === mine { tailing = nil }
         log.info("Dictation: captured \(samples.count) samples, queued")
         let previous = queue
         let turn = Task { () async throws -> String? in
@@ -234,10 +234,10 @@ public final class Dictation {
     }
 
     /// Waits out the tail, past its base length only while the last 160 ms still sound like speech.
-    private func waitForTail() async {
+    private func wait(for mine: Tail) async {
         let release = ContinuousClock.now
         try? await Task.sleep(for: tail)
-        while tailing, let source, ContinuousClock.now - release < tail * 3 {
+        while tailing === mine, let source, ContinuousClock.now - release < tail * 3 {
             collected += source.drain()
             let recent = Array(collected.suffix(Int(0.16 * MicrophoneCapture.sampleRate)))
             guard !Self.isSilent(recent, rate: MicrophoneCapture.sampleRate, floor: 1e-4) else { return } // -40 dBFS

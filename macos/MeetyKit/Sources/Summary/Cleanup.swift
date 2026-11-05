@@ -39,15 +39,18 @@ public struct DictationVocabulary: Sendable {
 
     /// `raw` with each heard spelling, matched as whole words in any case, replaced by its term; the longest wins.
     public func correct(_ raw: String) -> String {
-        let spellings = heard.keys.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+        let spellings = heard.sorted { $0.key.count > $1.key.count }
+        let groups = spellings.map { "(\(NSRegularExpression.escapedPattern(for: $0.key)))" }.joined(separator: "|")
         guard !spellings.isEmpty,
-              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])(?:\(spellings.joined(separator: "|")))(?![\\p{L}\\p{N}])", options: .caseInsensitive)
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])(?:\(groups))(?![\\p{L}\\p{N}])", options: .caseInsensitive)
         else { return raw }
         var text = raw
         // Backwards, so the matches still to come keep their offsets.
         for match in regex.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)).reversed() {
-            guard let range = Range(match.range, in: text), let term = heard[text[range].lowercased()] else { continue }
-            text.replaceSubrange(range, with: term)
+            // The group says which spelling matched; the regex's case folding can differ from lowercasing (ß, SS).
+            guard let range = Range(match.range, in: text),
+                  let group = spellings.indices.first(where: { match.range(at: $0 + 1).location != NSNotFound }) else { continue }
+            text.replaceSubrange(range, with: spellings[group].value)
         }
         return text
     }

@@ -301,18 +301,37 @@ import Testing
     @Test func `a press during the tail starts the next dictation, and both paste in order`() async throws {
         let delivered = Delivered()
         var mics = [SampleSource(samples: tone(1, rate: 48_000)), SampleSource(samples: tone(2, rate: 48_000))]
-        let d = Dictation(capture: { mics.removeFirst() }, engine: { FakeEngine() }, clean: { $0 }, deliver: { delivered.texts.append($0) })
-        d.tail = .milliseconds(50)
+        var captures = 0
+        let d = Dictation(capture: { captures += 1; return mics.removeFirst() }, engine: { FakeEngine() }, clean: { $0 }, deliver: { delivered.texts.append($0) })
+        d.tail = .milliseconds(200)
         try d.start()
         async let first = d.finish()
-        while d.phase != .transcribing { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(20)) // inside the first tail
         try d.start()
-        #expect(d.phase == .listening)
-        try await Task.sleep(for: .milliseconds(100))
+        #expect(captures == 2) // a start ignored during the tail would leave this at 1
         let second = try await d.finish()
         #expect(try await first == "words 1.0")
         #expect(second == "words 2.0")
         #expect(delivered.texts == ["words 1.0", "words 2.0"])
+    }
+
+    @Test func `tails that overlap keep each capture's own audio`() async throws {
+        let delivered = Delivered()
+        var mics = [1.0, 2.0, 3.0].map { SampleSource(samples: tone($0, rate: 48_000)) }
+        let d = Dictation(capture: { mics.removeFirst() }, engine: { FakeEngine() }, clean: { $0 }, deliver: { delivered.texts.append($0) })
+        d.tail = .milliseconds(200)
+        try d.start()
+        async let first = d.finish()
+        try await Task.sleep(for: .milliseconds(20))
+        try d.start()
+        async let second = d.finish()
+        try await Task.sleep(for: .milliseconds(20))
+        try d.start()
+        let third = try await d.finish()
+        #expect(try await first == "words 1.0")
+        #expect(try await second == "words 2.0")
+        #expect(third == "words 3.0")
+        #expect(delivered.texts == ["words 1.0", "words 2.0", "words 3.0"])
     }
 
     @Test func `engine errors reach the caller and leave it idle`() async throws {
