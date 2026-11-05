@@ -56,7 +56,7 @@ final class DictationPane: SettingsPane {
         let accessRow = NSStackView(views: [access, grant])
         accessRow.spacing = 8
         section("Push to talk", [form([("Dictation", enabled), ("Accessibility", accessRow)])],
-                note: "Hold the key, speak, and let go: the text is pasted where you are typing. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records.")
+                note: "Hold the key, speak, and let go: the text is pasted where you are typing. Double-tap it to keep listening hands-free, then press it once to finish. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records.")
         section("Cleanup", [form([("Tidy the text with", cleanup)]), modelForm],
                 note: "Fixes punctuation and capitalization, drops filler words and false starts, and keeps the language you spoke. If cleanup fails or takes more than 5 seconds, the text is pasted as heard. Apple Intelligence needs to be on in System Settings and doesn't support every language; a fast hosted model such as Claude Haiku or Mercury on OpenRouter does.")
         loadKeyAndModels()

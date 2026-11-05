@@ -6,7 +6,8 @@ import os
 private let log = Logger(subsystem: "com.meetily.ai", category: "dictation")
 
 /// Hold-to-talk on one modifier key held alone (Right Option by default), fed from the app's key monitors.
-/// Typing or another modifier during the hold is a keyboard shortcut, so it cancels.
+/// Typing or another modifier during the hold is a keyboard shortcut, so it cancels. A double tap keeps listening
+/// hands-free until the next press, through typing and shortcuts.
 public struct PushToTalk: Sendable {
     public enum Action: Sendable, Equatable { case start, finish, cancel }
 
@@ -14,7 +15,11 @@ public struct PushToTalk: Sendable {
     public let keyCode: UInt16
     /// Shorter holds are taps, not dictation.
     public let minimumHold: Duration
+    /// A press this soon after a tap locks the dictation.
+    public let doubleTap: Duration = .milliseconds(300)
+    public private(set) var isLocked = false
     private var pressedAt: ContinuousClock.Instant?
+    private var tappedAt: ContinuousClock.Instant?
 
     public init(keyCode: UInt16 = 61, minimumHold: Duration = .milliseconds(300)) {
         self.keyCode = keyCode
@@ -23,17 +28,28 @@ public struct PushToTalk: Sendable {
 
     /// A modifier changed. `held`: the trigger is down; `others`: any other modifier is down.
     public mutating func flagsChanged(keyCode: UInt16, held: Bool, others: Bool, at now: ContinuousClock.Instant) -> Action? {
+        let pressed = keyCode == self.keyCode && held && !others
+        if isLocked {
+            guard pressed else { return nil }
+            isLocked = false
+            return .finish
+        }
         guard let pressedAt else {
-            guard keyCode == self.keyCode, held, !others else { return nil }
-            self.pressedAt = now
+            guard pressed else { return nil }
+            isLocked = tappedAt.map { now - $0 < doubleTap } ?? false
+            tappedAt = nil
+            self.pressedAt = isLocked ? nil : now
             return .start
         }
         self.pressedAt = nil
         guard keyCode == self.keyCode, !held, !others else { return .cancel }
-        return now - pressedAt >= minimumHold ? .finish : .cancel
+        if now - pressedAt >= minimumHold { return .finish }
+        tappedAt = now
+        return .cancel
     }
 
     public mutating func keyDown() -> Action? {
+        tappedAt = nil
         guard pressedAt != nil else { return nil }
         pressedAt = nil
         return .cancel

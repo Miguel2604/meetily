@@ -38,7 +38,7 @@ final class DictationController {
         track { [weak self] in self?.refresh() }
         track { [weak self] in
             guard let self else { return }
-            overlay.show(dictation.phase)
+            overlay.show(dictation.phase, locked: ptt.isLocked)
         }
     }
 
@@ -98,7 +98,9 @@ final class DictationController {
         }
         if let action { Logger(subsystem: "com.meetily.ai", category: "dictation").info("Push to talk: \(String(describing: action), privacy: .public)") }
         switch action {
-        case .start: start()
+        case .start:
+            start()
+            if dictation.phase != .listening { ptt = PushToTalk() } // it didn't start, so don't wait for a finishing press
         case .finish:
             Task {
                 do { try await dictation.finish() } catch { overlay.flash("Dictation failed: \(error)") }
@@ -211,10 +213,10 @@ final class DictationOverlay {
         panel.contentView = glass
     }
 
-    func show(_ phase: Dictation.Phase) {
+    func show(_ phase: Dictation.Phase, locked: Bool) {
         switch phase {
         case .idle: if flashing == nil { panel.orderOut(nil) }
-        case .listening: present("mic.fill", .systemRed, "Listening…")
+        case .listening: present("mic.fill", .systemRed, locked ? "Listening. Press ⌥ again to finish" : "Listening…")
         case .transcribing: present("waveform", .secondaryLabelColor, "Transcribing…")
         case .cleaning: present("sparkles", .secondaryLabelColor, "Tidying up…")
         }

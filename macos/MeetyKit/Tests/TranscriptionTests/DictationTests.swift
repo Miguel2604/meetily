@@ -36,6 +36,56 @@ import Testing
         #expect(ptt.flagsChanged(keyCode: key, held: false, others: true, at: t0 + .seconds(4)) == nil)
     }
 
+    func press(_ ptt: inout PushToTalk, _ ms: Int, others: Bool = false) -> PushToTalk.Action? {
+        ptt.flagsChanged(keyCode: key, held: true, others: others, at: t0 + .milliseconds(ms))
+    }
+
+    func release(_ ptt: inout PushToTalk, _ ms: Int) -> PushToTalk.Action? {
+        ptt.flagsChanged(keyCode: key, held: false, others: false, at: t0 + .milliseconds(ms))
+    }
+
+    @Test func `a double tap keeps listening until the next press`() {
+        var ptt = PushToTalk(keyCode: key)
+        #expect(press(&ptt, 0) == .start)
+        #expect(release(&ptt, 100) == .cancel)
+        #expect(!ptt.isLocked)
+        #expect(press(&ptt, 250) == .start)
+        #expect(ptt.isLocked)
+        #expect(release(&ptt, 350) == nil)
+        #expect(ptt.keyDown() == nil) // typing and shortcuts don't end it
+        #expect(ptt.flagsChanged(keyCode: 56, held: true, others: true, at: t0 + .seconds(1)) == nil)
+        #expect(press(&ptt, 1_500, others: true) == nil)
+        #expect(release(&ptt, 1_600) == nil)
+        #expect(ptt.isLocked)
+        #expect(press(&ptt, 5_000) == .finish)
+        #expect(!ptt.isLocked)
+        #expect(release(&ptt, 5_100) == nil)
+        #expect(press(&ptt, 9_000) == .start) // back to an ordinary hold
+        #expect(release(&ptt, 11_000) == .finish)
+    }
+
+    @Test func `a slow second tap, typing between taps, or a real hold first don't lock`() {
+        var slow = PushToTalk(keyCode: key)
+        _ = press(&slow, 0)
+        _ = release(&slow, 100)
+        #expect(press(&slow, 500) == .start)
+        #expect(!slow.isLocked)
+        #expect(release(&slow, 2_000) == .finish)
+
+        var typed = PushToTalk(keyCode: key)
+        _ = press(&typed, 0)
+        _ = release(&typed, 100)
+        _ = typed.keyDown()
+        #expect(press(&typed, 200) == .start)
+        #expect(!typed.isLocked)
+
+        var held = PushToTalk(keyCode: key)
+        _ = press(&held, 0)
+        #expect(release(&held, 2_000) == .finish)
+        #expect(press(&held, 2_100) == .start)
+        #expect(!held.isLocked)
+    }
+
     @Test func `other keys alone do nothing`() {
         var ptt = PushToTalk(keyCode: key)
         #expect(ptt.keyDown() == nil)
