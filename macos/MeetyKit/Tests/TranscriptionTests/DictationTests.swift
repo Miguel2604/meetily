@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Transcription
 
@@ -98,6 +99,33 @@ import Testing
         try d.start()
         #expect(try await d.finish() == nil)
         #expect(delivered.texts.isEmpty)
+    }
+
+    @Test func `a near-silent capture never reaches the model`() async throws {
+        final class Counting: TranscriptionEngine {
+            let calls = Mutex(0)
+            func transcribe(samples: [Float]) async throws -> [Segment] {
+                calls.withLock { $0 += 1 }
+                return [Segment(text: "Thank you.", start: 0, end: 1)]
+            }
+        }
+        let delivered = Delivered(), engine = Counting()
+        let hum = tone(1, rate: 48_000).map { $0 * 0.003 + 0.05 } // about -60 dBFS on a steady offset
+        let d = dictation(SampleSource(samples: hum, chunk: 48_000), engine: engine, delivered: delivered)
+        try d.start()
+        #expect(try await d.finish() == nil)
+        #expect(engine.calls.withLock { $0 } == 0)
+        #expect(delivered.texts.isEmpty)
+        #expect(d.phase == .idle)
+    }
+
+    @Test func `only the loudest moment decides whether a capture is silent`() {
+        let rate = 48_000.0
+        #expect(Dictation.isSilent([], rate: rate))
+        #expect(Dictation.isSilent(silence(1, rate: rate), rate: rate))
+        #expect(Dictation.isSilent(silence(1, rate: rate).map { $0 + 0.2 }, rate: rate))
+        #expect(!Dictation.isSilent(silence(2, rate: rate) + tone(0.1, rate: rate) + silence(2, rate: rate), rate: rate))
+        #expect(!Dictation.isSilent(tone(1, rate: rate).map { $0 * 0.05 }, rate: rate)) // a quiet mic still counts
     }
 
     @Test func `a second start while listening is ignored`() async throws {

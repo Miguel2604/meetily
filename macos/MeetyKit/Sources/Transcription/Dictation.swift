@@ -125,7 +125,10 @@ public final class Dictation {
             log.info("Dictation: transcribing")
             guard id == self.generation else { return nil }
             self.stage = .transcribing
-            let audio = try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate).process(samples)
+            guard let audio = try await Self.prepared(samples) else {
+                log.info("Dictation: \(samples.count) samples, silent, dropped")
+                return nil
+            }
             let text: String
             do {
                 text = try await loading.value.transcribe(samples: audio).map(\.text).joined(separator: " ")
@@ -145,6 +148,23 @@ public final class Dictation {
         }
         queue = Task { _ = await turn.result }
         return try await turn.value
+    }
+
+    /// True when the loudest 30 ms, offset removed, stays under -50 dBFS: an empty hold, which models fill with an
+    /// invented "Thank you". The threshold and window are Hex's.
+    nonisolated static func isSilent(_ samples: [Float], rate: Double) -> Bool {
+        let window = Int(rate * 0.03)
+        return !stride(from: 0, to: samples.count, by: window).contains { start in
+            let slice = samples[start..<min(start + window, samples.count)]
+            let mean = slice.reduce(0, +) / Float(slice.count)
+            return slice.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(slice.count) >= 1e-5
+        }
+    }
+
+    /// The capture at the model's rate, or nil when it's silent. Off the main actor: a hands-free capture can be long.
+    @concurrent private static func prepared(_ samples: [Float]) async throws -> [Float]? {
+        guard !isSilent(samples, rate: MicrophoneCapture.sampleRate) else { return nil }
+        return try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate).process(samples)
     }
 
     /// Stops the microphone and returns everything it captured.
