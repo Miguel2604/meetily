@@ -161,6 +161,76 @@ import Testing
         #expect(d.phase == .idle)
     }
 
+    @Test func `a tap or chord ends only the capture, so what's processing still pastes`() async throws {
+        let delivered = Delivered()
+        var mics = [SampleSource(samples: tone(1, rate: 48_000)), SampleSource(samples: tone(2, rate: 48_000))]
+        let d = Dictation(capture: { mics.removeFirst() }, engine: { FakeEngine() }, clean: { raw in
+            try? await Task.sleep(for: .milliseconds(100))
+            return raw
+        }, deliver: { delivered.texts.append($0) })
+        d.tail = .zero
+        try d.start()
+        async let first = d.finish()
+        while d.phase != .cleaning { await Task.yield() }
+        try d.start()
+        d.discard()
+        #expect(d.phase == .cleaning)
+        #expect(try await first == "words 1.0")
+        #expect(delivered.texts == ["words 1.0"])
+        #expect(try await d.finish() == nil)
+    }
+
+    /// A microphone that keeps hearing `level` until it stops.
+    final class LiveMic: AudioSource {
+        let level: Float
+        let stopped = Mutex<ContinuousClock.Instant?>(nil)
+        init(level: Float) { self.level = level }
+        var droppedSamples: Int { 0 }
+        func stop() { stopped.withLock { $0 = .now } }
+        func drain() -> [Float] { stopped.withLock { $0 } == nil ? tone(0.04, rate: 48_000).map { $0 * level } : [] }
+    }
+
+    @Test func `the tail grows while speech runs, and only to three times its length`() async throws {
+        let mic = LiveMic(level: 1)
+        let d = Dictation(capture: { mic }, engine: { FakeEngine() }, clean: { $0 }, deliver: { _ in })
+        d.tail = .milliseconds(200)
+        try d.start()
+        let release = ContinuousClock.now
+        _ = try await d.finish()
+        let held = try #require(mic.stopped.withLock { $0 }) - release
+        #expect(held >= .milliseconds(590))
+        #expect(held < .milliseconds(900))
+    }
+
+    @Test func `the tail stops at its base length once the speaker is quiet`() async throws {
+        let mic = LiveMic(level: 0.001)
+        let d = Dictation(capture: { mic }, engine: { FakeEngine() }, clean: { $0 }, deliver: { _ in })
+        d.tail = .milliseconds(200)
+        try d.start()
+        let release = ContinuousClock.now
+        _ = try await d.finish()
+        let held = try #require(mic.stopped.withLock { $0 }) - release
+        #expect(held >= .milliseconds(190))
+        #expect(held < .milliseconds(450))
+    }
+
+    @Test func `a press during the tail starts the next dictation, and both paste in order`() async throws {
+        let delivered = Delivered()
+        var mics = [SampleSource(samples: tone(1, rate: 48_000)), SampleSource(samples: tone(2, rate: 48_000))]
+        let d = Dictation(capture: { mics.removeFirst() }, engine: { FakeEngine() }, clean: { $0 }, deliver: { delivered.texts.append($0) })
+        d.tail = .milliseconds(50)
+        try d.start()
+        async let first = d.finish()
+        while d.phase != .transcribing { await Task.yield() }
+        try d.start()
+        #expect(d.phase == .listening)
+        try await Task.sleep(for: .milliseconds(100))
+        let second = try await d.finish()
+        #expect(try await first == "words 1.0")
+        #expect(second == "words 2.0")
+        #expect(delivered.texts == ["words 1.0", "words 2.0"])
+    }
+
     @Test func `engine errors reach the caller and leave it idle`() async throws {
         struct NotReady: Error {}
         let d = Dictation(capture: { SampleSource(samples: tone(1, rate: 48_000)) }, engine: { throw NotReady() },

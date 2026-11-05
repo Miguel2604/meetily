@@ -103,7 +103,7 @@ final class DictationController {
             Task {
                 do { try await dictation.finish() } catch { overlay.flash("Dictation failed: \(error)") }
             }
-        case .cancel: dictation.cancel()
+        case .cancel: dictation.discard()
         case nil: break
         }
     }

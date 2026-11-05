@@ -48,7 +48,8 @@ public final class Dictation {
 
     /// Listening wins; otherwise the stage of the dictation being processed.
     public var phase: Phase { source != nil ? .listening : processing > 0 ? stage : .idle }
-    /// Keeps capturing this long after the release, so the last word isn't clipped.
+    /// Keeps capturing this long after the release, so the last word isn't clipped, and up to three times as long
+    /// while speech is still running (Hex's 200 ms, growing to 600 ms).
     @ObservationIgnored public var tail: Duration = .milliseconds(200)
 
     private var source: (any AudioSource)?
@@ -65,6 +66,10 @@ public final class Dictation {
     @ObservationIgnored private var queue: Task<Void, Never>?
     /// Bumped by `cancel`, so dictations already processing drop their results.
     @ObservationIgnored private var generation = 0
+    /// The capture is finishing, in its tail after the release.
+    @ObservationIgnored private var tailing = false
+    /// What a tail cut short had captured, for the `finish` still waiting on it.
+    @ObservationIgnored private var cut: [Float]?
 
     /// `capture` starts a 48 kHz microphone; `engine` hands out the prepared model; `clean` never fails (it falls
     /// back to its input); `deliver` puts the text where the user is typing.
@@ -78,6 +83,10 @@ public final class Dictation {
 
     /// Starts listening. Ignored while already listening; throws when the microphone fails to start.
     public func start() throws {
+        if tailing { // a press during the tail ends that clip now, so this one isn't lost
+            cut = stopCapture()
+            tailing = false
+        }
         guard source == nil else { return log.info("Dictation: start ignored, still listening") }
         let source = try capture()
         log.info("Dictation: listening")
@@ -98,6 +107,14 @@ public final class Dictation {
     /// Stops listening and drops every dictation still processing, so none of them is pasted.
     public func cancel() {
         generation += 1
+        tailing = false
+        cut = nil
+        discard()
+    }
+
+    /// Stops listening and throws away this capture only; dictations already processing still paste.
+    public func discard() {
+        guard !tailing else { return } // that capture is finishing
         loading?.cancel()
         loading = nil
         _ = stopCapture()
@@ -115,9 +132,12 @@ public final class Dictation {
         processing += 1
         stage = .transcribing
         defer { processing -= 1 }
-        try? await Task.sleep(for: tail)
+        tailing = true
+        await waitForTail()
         guard id == generation else { return nil }
-        let samples = stopCapture()
+        let samples = cut ?? stopCapture()
+        cut = nil
+        tailing = false
         log.info("Dictation: captured \(samples.count) samples, queued")
         let previous = queue
         let turn = Task { () async throws -> String? in
@@ -150,14 +170,26 @@ public final class Dictation {
         return try await turn.value
     }
 
-    /// True when the loudest 30 ms, offset removed, stays under -50 dBFS: an empty hold, which models fill with an
-    /// invented "Thank you". The threshold and window are Hex's.
-    nonisolated static func isSilent(_ samples: [Float], rate: Double) -> Bool {
+    /// Waits out the tail, past its base length only while the last 160 ms still sound like speech.
+    private func waitForTail() async {
+        let release = ContinuousClock.now
+        try? await Task.sleep(for: tail)
+        while tailing, let source, ContinuousClock.now - release < tail * 3 {
+            collected += source.drain()
+            let recent = Array(collected.suffix(Int(0.16 * MicrophoneCapture.sampleRate)))
+            guard !Self.isSilent(recent, rate: MicrophoneCapture.sampleRate, floor: 1e-4) else { return } // -40 dBFS
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+    }
+
+    /// True when the loudest 30 ms, offset removed, stays under `floor` (power; 1e-5 is -50 dBFS): an empty hold, which
+    /// models fill with an invented "Thank you". The default threshold and the window are Hex's.
+    nonisolated static func isSilent(_ samples: [Float], rate: Double, floor: Float = 1e-5) -> Bool {
         let window = Int(rate * 0.03)
         return !stride(from: 0, to: samples.count, by: window).contains { start in
             let slice = samples[start..<min(start + window, samples.count)]
             let mean = slice.reduce(0, +) / Float(slice.count)
-            return slice.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(slice.count) >= 1e-5
+            return slice.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(slice.count) >= floor
         }
     }
 
