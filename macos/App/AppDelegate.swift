@@ -6,6 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var mainWindow: MainWindowController?
     private var settingsWindow: SettingsWindowController?
+    #if DEBUG
+    private var debugHistory: DictationHistoryWindowController?
+    #endif
     private var onboarding: OnboardingWindowController?
     private var statusItem: StatusItem?
     private var quitting = false
@@ -59,8 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         DispatchQueue.main.async { Self.logLaunchTime() }
         #if DEBUG
-        DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window?.attachedSheet ?? main.window }
+        DebugSnapshot.scheduleIfRequested { [weak self] in self?.debugHistory?.window ?? self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window?.attachedSheet ?? main.window }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
+        if ProcessInfo.processInfo.environment["MEETY_DICTATION_HISTORY"] != nil {
+            debugHistory = DictationHistoryWindowController(store: model.store)
+            debugHistory?.show()
+        }
         if let frames = ProcessInfo.processInfo.environment["MEETY_DICTATION_PILL"] { model.dictation.runPillDemo(frames: frames) }
         if let id = ProcessInfo.processInfo.environment["MEETY_OPEN_MEETING"] { model.route = .meeting(id) }
         if let path = ProcessInfo.processInfo.environment["MEETY_IMPORT"] { main.importFile(URL(fileURLWithPath: path)) }

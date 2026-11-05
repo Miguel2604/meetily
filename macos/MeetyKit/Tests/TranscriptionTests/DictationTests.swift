@@ -146,6 +146,9 @@ import Testing
         #expect(Dictation.cappingPauses(speech, rate: rate).count == speech.count)
         #expect(Dictation.cappingPauses(digital, rate: rate).count == digital.count) // nothing heard: untouched
         #expect(Dictation.cappingPauses([], rate: rate).isEmpty)
+        // Quiet steady speech that starts the noise floor at its own level isn't a pause.
+        let soft = tone(5, rate: rate).map { $0 * 0.03 }, loud = tone(1, rate: rate)
+        #expect(Dictation.cappingPauses(soft + loud, rate: rate).count == soft.count + loud.count)
     }
 
     @Test func `only the loudest moment decides whether a capture is silent`() {
@@ -159,12 +162,17 @@ import Testing
 
     @Test func `start and stop sounds the microphone hears don't make an empty hold count as speech`() {
         let rate = 48_000.0, tail = Duration.milliseconds(200)
-        let cue = tone(0.1, rate: rate), quiet = silence(1, rate: rate)
+        let cue = tone(0.1, rate: rate), quiet = silence(2, rate: rate)
         #expect(Dictation.heardNothing(cue + quiet + cue, rate: rate, tail: tail))
         #expect(!Dictation.heardNothing(cue + quiet + tone(0.3, rate: rate) + quiet + cue, rate: rate, tail: tail))
         // Too short to skip anything: it goes to the model rather than risk dropping a quick word.
         #expect(!Dictation.heardNothing(tone(0.2, rate: rate), rate: rate, tail: tail))
         #expect(Dictation.heardNothing(silence(0.2, rate: rate), rate: rate, tail: tail))
+        // A short word at the start of a short hold counts, with a silent tail after it.
+        #expect(!Dictation.heardNothing(tone(0.2, rate: rate) + silence(0.35, rate: rate), rate: rate, tail: tail))
+        // With the sounds off nothing is skipped: there's nothing of ours to hear.
+        #expect(!Dictation.heardNothing(cue + quiet, rate: rate, tail: tail, hearsCues: false))
+        #expect(!Dictation.heardNothing(quiet + cue, rate: rate, tail: tail, hearsCues: false))
     }
 }
 

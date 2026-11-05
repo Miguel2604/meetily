@@ -39,6 +39,11 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
+/// Measures from the top, so a pane taller than the window opens at its first section and stays there as the window resizes.
+private final class TopClipView: NSClipView {
+    override var isFlipped: Bool { true }
+}
+
 /// A settings tab: a fixed-width column of titled sections that scrolls when it is taller than the screen. The window
 /// takes the pane's fitting size on a tab switch.
 class SettingsPane: NSViewController {
@@ -62,6 +67,9 @@ class SettingsPane: NSViewController {
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        let clip = TopClipView()
+        clip.drawsBackground = false
+        scroll.contentView = clip
         scroll.documentView = column
         column.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

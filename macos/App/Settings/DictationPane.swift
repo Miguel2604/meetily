@@ -236,7 +236,6 @@ final class DictationPane: SettingsPane, NSTextViewDelegate, NSTextFieldDelegate
     override func viewDidAppear() {
         super.viewDidAppear()
         view.window?.makeFirstResponder(nil) // the first text field would otherwise take focus and scroll the pane to it
-        column.scrollToVisible(NSRect(x: 0, y: column.isFlipped ? 0 : column.bounds.maxY - 1, width: 1, height: 1))
     }
 
     override func viewWillAppear() {

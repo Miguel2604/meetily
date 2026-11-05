@@ -174,6 +174,8 @@ public final class Dictation {
     public var phase: Phase { source != nil && tailing == nil ? .listening : processing > 0 ? stage : .idle }
     /// The microphone's RMS level just now, for a meter.
     @ObservationIgnored public private(set) var level: Float = 0
+    /// Meety plays sounds as a dictation starts and stops, so the microphone may hear them.
+    @ObservationIgnored public var hearsCues = true
     /// Keeps capturing this long after the release, so the last word isn't clipped, and up to three times as long
     /// while speech is still running (Hex's 200 ms, growing to 600 ms).
     @ObservationIgnored public var tail: Duration = .milliseconds(200)
@@ -272,7 +274,7 @@ public final class Dictation {
             log.info("Dictation: transcribing")
             guard id == self.generation else { return nil }
             self.stage = .transcribing
-            guard let audio = try await Self.prepared(samples, tail: heardTail) else {
+            guard let audio = try await Self.prepared(samples, tail: heardTail, hearsCues: self.hearsCues) else {
                 log.info("Dictation: \(samples.count) samples, silent, dropped")
                 return nil
             }
@@ -320,17 +322,20 @@ public final class Dictation {
         }
     }
 
-    /// `isSilent`, without the first 250 ms and the tail, where the microphone can hear Meety's own start and stop sounds.
-    /// A capture too short for that is treated as heard: better a model's guess than a quick word dropped.
-    nonisolated static func heardNothing(_ samples: [Float], rate: Double, tail: Duration) -> Bool {
-        let head = Int(rate * 0.25), end = samples.count - Int(rate * Double(tail.components.seconds) + rate * Double(tail.components.attoseconds) * 1e-18)
-        guard end - head >= Int(rate * 0.1) else { return samples.isEmpty || isSilent(samples, rate: rate) }
+    /// `isSilent`, without the parts where the microphone can hear Meety's own sounds: the tail, and the first 250 ms of a
+    /// hold over a second long. A shorter hold keeps its start, since that may be the only word in it: better a model's
+    /// guess than a quick word dropped.
+    nonisolated static func heardNothing(_ samples: [Float], rate: Double, tail: Duration, hearsCues: Bool = true) -> Bool {
+        guard hearsCues else { return isSilent(samples, rate: rate) }
+        let end = samples.count - Int(rate * (Double(tail.components.seconds) + Double(tail.components.attoseconds) * 1e-18))
+        let head = end >= Int(rate * 1.25) ? Int(rate * 0.25) : 0
+        guard end - head >= Int(rate * 0.1) else { return isSilent(samples, rate: rate) }
         return isSilent(Array(samples[head..<end]), rate: rate)
     }
 
     /// `samples` with each long pause cut to its first 2.5 s and last 0.3 s (a trailing one to its first 2.5 s), so a
     /// hands-free dictation left waiting doesn't feed the model the silence it invents text in. Quiet means within 4 dB of
-    /// a noise floor that falls at once and rises 3 dB per second, or under -70 dBFS, and never over -35 dBFS. A clip with
+    /// a noise floor that falls at once and rises 3 dB per second, or under -70 dBFS, and never over -45 dBFS. A clip with
     /// nothing above it stays whole. The rules are Hex's, plus that ceiling.
     nonisolated static func cappingPauses(_ samples: [Float], rate: Double) -> [Float] {
         let frame = Int(rate * 0.02), keepHead = Int(rate * 2.5), keepTail = Int(rate * 0.3)
@@ -358,7 +363,7 @@ public final class Dictation {
             let level = 10 * log10(max(power, 1e-12))
             let bottom = floor.map { min(level, $0 + 0.06) } ?? level // 0.06 dB a frame is 3 dB a second
             floor = bottom
-            if level < -35, level <= max(bottom + 4, -70) { // the ceiling: a clip that starts mid-word starts the floor high
+            if level < -45, level <= max(bottom + 4, -70) { // the ceiling: quiet speech can start the floor at its own level
                 pause = (pause?.lowerBound ?? start)..<end
             } else {
                 heard = true
@@ -372,8 +377,8 @@ public final class Dictation {
     }
 
     /// The capture at the model's rate, or nil when it's silent. Off the main actor: a hands-free capture can be long.
-    @concurrent private static func prepared(_ samples: [Float], tail: Duration) async throws -> [Float]? {
-        guard !heardNothing(samples, rate: MicrophoneCapture.sampleRate, tail: tail) else { return nil }
+    @concurrent private static func prepared(_ samples: [Float], tail: Duration, hearsCues: Bool) async throws -> [Float]? {
+        guard !heardNothing(samples, rate: MicrophoneCapture.sampleRate, tail: tail, hearsCues: hearsCues) else { return nil }
         return try Resampler(from: MicrophoneCapture.sampleRate, to: transcriptionSampleRate)
             .process(cappingPauses(samples, rate: MicrophoneCapture.sampleRate))
     }

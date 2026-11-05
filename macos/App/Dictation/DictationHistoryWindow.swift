@@ -90,7 +90,9 @@ final class DictationHistoryWindowController: NSWindowController, NSTableViewDat
         copy.contentTintColor = .secondaryLabelColor
         copy.toolTip = entry.heard == entry.text ? "Copy" : "Copy. Option-click copies the text as heard"
         copy.tag = row
-        let cell = NSStackView(views: [lines, copy])
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let cell = NSStackView(views: [lines, spacer, copy])
         cell.alignment = .top
         cell.spacing = 12
         cell.edgeInsets = NSEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)

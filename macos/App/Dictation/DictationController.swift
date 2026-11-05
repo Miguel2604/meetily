@@ -49,7 +49,12 @@ final class DictationController {
     init(model: AppModel) {
         self.model = model
         track { [weak self] in self?.refresh() }
-        Task { [store = model.store] in try? await store.pruneDictations() }
+        Task { [store = model.store] in // hourly, so entries expire on time in an app that stays open for weeks
+            while !Task.isCancelled {
+                try? await store.pruneDictations()
+                try? await Task.sleep(for: .seconds(3600))
+            }
+        }
         overlay.level = { [weak self] in self?.dictation.level ?? 0 }
         track { [weak self] in
             guard let self else { return }
@@ -73,7 +78,6 @@ final class DictationController {
             return
         }
         reveal?.cancel()
-        if lastPhase == .listening, phase != .idle { play(.stop) }
         overlay.show(phase, finishKey: nil)
     }
 
@@ -176,7 +180,9 @@ final class DictationController {
                 self?.refresh()
             }
         }
-        guard enabled != !monitors.isEmpty || (enabled && trusted != monitorsTrusted) || ptt.keyCode != key.keyCode else { return }
+        // A new key waits for the capture to end, so a hands-free dictation can still finish on the key it started with.
+        let keyChanged = ptt.keyCode != key.keyCode && dictation.phase != .listening
+        guard enabled != !monitors.isEmpty || (enabled && trusted != monitorsTrusted) || keyChanged else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
         ptt = PushToTalk(key: key) // a hold that began before the change would cancel the next real one
@@ -213,6 +219,7 @@ final class DictationController {
             start()
             if dictation.phase != .listening { ptt = PushToTalk(key: key) } // it didn't start, so don't wait for a finishing press
         case .finish:
+            play(.stop)
             Task {
                 do { try await dictation.finish() } catch { fail("Dictation failed: \(error)") }
             }
@@ -228,6 +235,7 @@ final class DictationController {
             else { fail("Allow Meety in System Settings › Privacy & Security › Microphone") }
             return
         }
+        dictation.hearsCues = model.settings.dictationSounds
         do { try dictation.start() } catch { fail("Microphone failed to start: \(error)") }
     }
 
