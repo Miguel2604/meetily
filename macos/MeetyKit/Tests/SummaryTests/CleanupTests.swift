@@ -93,3 +93,39 @@ struct RealCleanupTests {
         #expect(!text.contains(drops))
     }
 }
+
+@Suite struct DictationVocabularyTests {
+    @Test func `heard spellings become the term, as whole words in any case, longest first`() {
+        let vocabulary = DictationVocabulary("Kubernetes: cuber netties, koobernetes\n\nMeety\nMeety AI: meaty ai, meaty\nUS$: us dollars\n : nothing\n")
+        #expect(vocabulary.terms == ["Kubernetes", "Meety", "Meety AI", "US$"])
+        #expect(vocabulary.correct("Deploy KOOBERNETES and cuber netties.") == "Deploy Kubernetes and Kubernetes.")
+        #expect(vocabulary.correct("meaty ai ships, Meaty too, meatyball stays") == "Meety AI ships, Meety AI too, meatyball stays")
+        #expect(vocabulary.correct("five us dollars") == "five US$")
+        #expect(vocabulary.correct("nothing to fix") == "nothing to fix")
+    }
+
+    @Test func `an empty list changes nothing`() {
+        #expect(DictationVocabulary("").terms.isEmpty)
+        #expect(DictationVocabulary("").correct("as heard") == "as heard")
+        #expect(DictationVocabulary("Meety").correct("meety") == "meety")
+    }
+
+    @Test func `the terms reach the model, up to a limit, and no terms leave the prompt as it was`() async {
+        let seen = Mutex<String?>(nil)
+        let terms = (0..<100).map { "term\($0)" }
+        _ = await DictationCleanup.clean("hi", terms: terms) { system, _ in
+            seen.withLock { $0 = system }
+            return "Hi."
+        }
+        let prompt = seen.withLock { $0 } ?? ""
+        #expect(prompt.hasPrefix(DictationCleanup.system))
+        #expect(prompt.contains("term0; term1;"))
+        #expect(prompt.contains("term63"))
+        #expect(!prompt.contains("term64"))
+        _ = await DictationCleanup.clean("hi") { system, _ in
+            seen.withLock { $0 = system }
+            return "Hi."
+        }
+        #expect(seen.withLock { $0 } == DictationCleanup.system)
+    }
+}

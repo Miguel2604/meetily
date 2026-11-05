@@ -30,6 +30,8 @@ public final class Settings {
     /// The `Provider` raw value and model name for the dictationModel cleanup; its key is the provider's Keychain entry.
     public var dictationProvider: String { didSet { defaults.set(dictationProvider, forKey: "dictationProvider") } }
     public var dictationModel: String { didSet { defaults.set(dictationModel, forKey: "dictationModel") } }
+    /// One term per line, as `DictationVocabulary` reads it.
+    public var dictationVocabulary: String { didSet { defaults.set(dictationVocabulary, forKey: "dictationVocabulary") } }
 
     public static let defaultSaveFolder = URL.moviesDirectory.appending(path: "meety-recordings", directoryHint: .isDirectory)
 
@@ -55,6 +57,7 @@ public final class Settings {
         dictationCleanup = defaults.string(forKey: "dictationCleanup") ?? "onDevice"
         dictationProvider = defaults.string(forKey: "dictationProvider") ?? "claude"
         dictationModel = defaults.string(forKey: "dictationModel") ?? ""
+        dictationVocabulary = defaults.string(forKey: "dictationVocabulary") ?? ""
     }
 
     private static func importTauriStores(from dir: URL, into defaults: UserDefaults) {

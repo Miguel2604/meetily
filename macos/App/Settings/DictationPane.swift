@@ -3,7 +3,7 @@ import Core
 import Summary
 
 /// Push-to-talk dictation: the switch, Accessibility access, and which model tidies the text.
-final class DictationPane: SettingsPane {
+final class DictationPane: SettingsPane, NSTextViewDelegate {
     private let model: AppModel
     private lazy var enabled = Self.checkbox("Hold Right Option (⌥) to dictate into any app", false, target: self, action: #selector(enabledChosen(_:)))
     private let cleanup = NSPopUpButton()
@@ -13,6 +13,8 @@ final class DictationPane: SettingsPane {
     private let modelBox = NSComboBox()
     private let key = NSSecureTextField()
     private var modelForm = NSView()
+    private let vocabularyScroll = NSTextView.scrollableTextView()
+    private var vocabulary: NSTextView { vocabularyScroll.documentView as! NSTextView }
     /// The provider whose stored key the key field shows; nil while it loads, so nothing is saved under the wrong one.
     private var keyProvider: Provider?
     private static let modes: [(CleanupMode, String)] = [
@@ -59,6 +61,19 @@ final class DictationPane: SettingsPane {
                 note: "Hold the key, speak, and let go: the text is pasted where you are typing. Double-tap it to keep listening hands-free, then press it once to finish. ⌥⇧V pastes the last dictation again. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records.")
         section("Cleanup", [form([("Tidy the text with", cleanup)]), modelForm],
                 note: "Fixes punctuation and capitalization, drops filler words and false starts, and keeps the language you spoke. If cleanup fails or takes more than 5 seconds, the text is pasted as heard. Apple Intelligence needs to be on in System Settings and doesn't support every language; a fast hosted model such as Claude Haiku or Mercury on OpenRouter does.")
+        vocabularyScroll.borderType = .bezelBorder
+        vocabularyScroll.heightAnchor.constraint(equalToConstant: 96).isActive = true
+        vocabulary.font = Typography.body
+        vocabulary.isRichText = false
+        vocabulary.isAutomaticQuoteSubstitutionEnabled = false
+        vocabulary.isAutomaticDashSubstitutionEnabled = false
+        vocabulary.isAutomaticTextReplacementEnabled = false
+        vocabulary.isAutomaticSpellingCorrectionEnabled = false
+        vocabulary.textContainerInset = NSSize(width: 4, height: 6)
+        vocabulary.string = model.settings.dictationVocabulary
+        vocabulary.delegate = self
+        section("Vocabulary", [vocabularyScroll],
+                note: "Names and terms, one per line, with what the transcript writes instead after a colon: Kubernetes: cuber netties, koobernetes. Those spellings are fixed on this Mac, even with cleanup off. Cleanup also learns the first 64 terms, so a hosted model receives them.")
         loadKeyAndModels()
         track { [weak self] in
             guard let self else { return }
@@ -78,6 +93,8 @@ final class DictationPane: SettingsPane {
             grant.isHidden = granted
         }
     }
+
+    func textDidChange(_ notification: Notification) { model.settings.dictationVocabulary = vocabulary.string }
 
     override func viewWillAppear() {
         super.viewWillAppear()

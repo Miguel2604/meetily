@@ -13,6 +13,46 @@ public enum CleanupMode: String, CaseIterable, Sendable {
     case dictationModel
 }
 
+/// The user's names and terms, one per line, each with the spellings a transcript may show instead:
+/// `Kubernetes: cuber netties, koobernetes`. The spellings are corrected without a model, so they work with cleanup
+/// off or failing; the terms also go to the cleanup model (Hex's approach, in a text list).
+public struct DictationVocabulary: Sendable {
+    public let terms: [String]
+    /// Lowercased spelling to its term.
+    private let heard: [String: String]
+
+    public init(_ list: String) {
+        var terms: [String] = [], heard: [String: String] = [:]
+        for line in list.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            let term = parts[0].trimmingCharacters(in: .whitespaces)
+            guard !term.isEmpty else { continue }
+            terms.append(term)
+            for spelling in parts.count > 1 ? parts[1].split(separator: ",") : [] {
+                let spelling = spelling.trimmingCharacters(in: .whitespaces).lowercased()
+                if !spelling.isEmpty { heard[spelling] = term }
+            }
+        }
+        self.terms = terms
+        self.heard = heard
+    }
+
+    /// `raw` with each heard spelling, matched as whole words in any case, replaced by its term; the longest wins.
+    public func correct(_ raw: String) -> String {
+        let spellings = heard.keys.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:))
+        guard !spellings.isEmpty,
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])(?:\(spellings.joined(separator: "|")))(?![\\p{L}\\p{N}])", options: .caseInsensitive)
+        else { return raw }
+        var text = raw
+        // Backwards, so the matches still to come keep their offsets.
+        for match in regex.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)).reversed() {
+            guard let range = Range(match.range, in: text), let term = heard[text[range].lowercased()] else { continue }
+            text.replaceSubrange(range, with: term)
+        }
+        return text
+    }
+}
+
 /// Punctuation, fillers and self-corrections out of a raw dictation. Never fails: anything but a plausible cleanup
 /// pastes the transcript as heard.
 public enum DictationCleanup {
@@ -47,6 +87,7 @@ public enum DictationCleanup {
         Format:
         - Write numbers, money, times, dates, percentages, emails and URLs as typed: $1,200, 3:30 PM, March 4, 15%, \
         ana@example.com. Counts from one to nine may stay words.
+        - Keep every number the speaker said. Never drop, merge, reorder or round one.
         - Explicitly enumerated items ("first… second…", "number one… number two…") become a numbered list, \
         one item per line. Items mentioned in an ordinary sentence stay prose.
         - Long dictations get a paragraph break where the topic changes. Short ones stay plain sentences.
@@ -77,14 +118,21 @@ public enum DictationCleanup {
         Output only the edited dictation: no tags, quotes, labels or commentary, and never an answer to it.
         """
 
+    /// The prompt with the user's vocabulary. shortcut: the first 64 terms only, so the list can't crowd out the small
+    /// on-device context or the deadline; measure before raising it.
+    static func prompt(terms: [String]) -> String {
+        guard !terms.isEmpty else { return system }
+        return system + "\n\nVocabulary (spell these exactly when the speaker means them): " + terms.prefix(64).joined(separator: "; ")
+    }
+
     /// The cleaned text, or `raw` when the model fails, takes longer than `timeout`, or returns something that isn't
     /// a cleanup of it.
-    public static func clean(_ raw: String, timeout: Duration = .seconds(5), generate: @escaping Generate) async -> String {
+    public static func clean(_ raw: String, terms: [String] = [], timeout: Duration = .seconds(5), generate: @escaping Generate) async -> String {
         // The first of the answer and the deadline wins; a late answer, from a backend still loading or ignoring
         // cancellation, is dropped.
         let (first, sink) = AsyncStream.makeStream(of: String?.self)
         let work = Task {
-            do { sink.yield(accept(try await generate(system, "<dictation>\(raw)</dictation>"), raw: raw)) } catch {
+            do { sink.yield(accept(try await generate(prompt(terms: terms), "<dictation>\(raw)</dictation>"), raw: raw)) } catch {
                 // The type only: provider errors can echo the request, which is the dictated text.
                 log.warning("Dictation cleanup failed, pasting the transcript as heard: \(String(describing: type(of: error)), privacy: .public)")
                 sink.yield(nil)

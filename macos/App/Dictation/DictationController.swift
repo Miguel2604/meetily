@@ -151,21 +151,23 @@ final class DictationController {
         do { try dictation.start() } catch { overlay.flash("Microphone failed to start: \(error)") }
     }
 
-    private func clean(_ raw: String) async -> String {
+    private func clean(_ heard: String) async -> String {
+        let vocabulary = DictationVocabulary(model.settings.dictationVocabulary)
+        let raw = vocabulary.correct(heard)
         switch CleanupMode(rawValue: model.settings.dictationCleanup) ?? .onDevice {
         case .off:
             return raw
         case .onDevice:
             guard DictationCleanup.onDeviceAvailable else { return raw }
-            return await DictationCleanup.clean(raw, generate: DictationCleanup.onDevice)
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.onDevice)
         case .summaryModel:
             guard let config = try? await SummaryConfig.load(store: model.store) else { return raw }
-            return await DictationCleanup.clean(raw, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
         case .dictationModel:
             let name = model.settings.dictationModel
             guard let provider = Provider(id: model.settings.dictationProvider), !name.isEmpty else { return raw }
             let config = await SummaryConfig.dictation(provider: provider, model: name)
-            return await DictationCleanup.clean(raw, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
+            return await DictationCleanup.clean(raw, terms: vocabulary.terms, generate: DictationCleanup.summaryModel(config, client: LLMClient(), builtIn: model.builtIn))
         }
     }
 }
