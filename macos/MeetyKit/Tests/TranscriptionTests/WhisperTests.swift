@@ -1,3 +1,4 @@
+import Audio
 import Core
 import Foundation
 import Testing
@@ -146,5 +147,24 @@ struct RealWhisperTests {
         let text = try await engine.transcribe(samples: spokenSamples("The quarterly budget review is on Friday.")).map(\.text).joined()
         print("whisper: \(text)")
         #expect(text.lowercased().contains("budget"))
+    }
+
+    @Test func `the dictation sounds leave the transcript alone`() async throws {
+        let models = WhisperModels(directory: Paths.whisperModels)
+        try #require(await models.status(.turbo) == .available)
+        let engine = try await models.engine(.turbo, language: "en")
+        func cue(_ cue: DictationCue) throws -> [Float] {
+            try Resampler(from: DictationSounds.sampleRate, to: transcriptionSampleRate).process(DictationSounds.samples(cue))
+        }
+        func words(_ text: String) -> [String] { text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init) }
+        let clean = silence(0.3) + (try spokenSamples("The quarterly budget review is on Friday.")) + silence(0.2)
+        var heard = clean
+        for (index, sample) in try cue(.start).enumerated() { heard[index] += sample }
+        let stopAt = clean.count - Int(0.2 * transcriptionSampleRate)
+        for (index, sample) in try cue(.stop).enumerated() where stopAt + index < heard.count { heard[stopAt + index] += sample }
+        let plain = try await engine.transcribe(samples: clean).map(\.text).joined(separator: " ")
+        let mixed = try await engine.transcribe(samples: heard).map(\.text).joined(separator: " ")
+        print("whisper without sounds: \(plain)\nwhisper with sounds:    \(mixed)")
+        #expect(words(plain) == words(mixed))
     }
 }

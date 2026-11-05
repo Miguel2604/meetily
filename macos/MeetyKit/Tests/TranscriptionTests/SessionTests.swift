@@ -204,6 +204,33 @@ struct RealVADTests {
     }
 }
 
+/// Whether the dictation sounds, at full level as if the mic sat on the speaker, change what Parakeet hears.
+/// MEETY_REAL_MODELS=1 swift test --filter RealCueTests
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_REAL_MODELS"] == "1"))
+struct RealCueTests {
+    func cue(_ cue: DictationCue) throws -> [Float] {
+        try Resampler(from: DictationSounds.sampleRate, to: transcriptionSampleRate).process(DictationSounds.samples(cue))
+    }
+
+    func words(_ text: String) -> [String] {
+        text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    }
+
+    @Test func `the start and stop sounds leave the transcript alone`() async throws {
+        let speech = try spokenSamples("The quarterly budget review is on Friday.")
+        let engine = try await ParakeetModels(directory: Paths.parakeetModels).engine(.phonon2)
+        let clean = silence(0.3) + speech + silence(0.2)
+        var heard = clean
+        for (index, sample) in try cue(.start).enumerated() { heard[index] += sample } // mic hot as the sound plays
+        let stop = try cue(.stop), stopAt = clean.count - Int(0.2 * transcriptionSampleRate)
+        for (index, sample) in stop.enumerated() where stopAt + index < heard.count { heard[stopAt + index] += sample }
+        let plain = try await engine.transcribe(samples: clean).map(\.text).joined(separator: " ")
+        let mixed = try await engine.transcribe(samples: heard).map(\.text).joined(separator: " ")
+        print("without sounds: \(plain)\nwith sounds:    \(mixed)")
+        #expect(words(plain) == words(mixed))
+    }
+}
+
 /// S22 measurement: a 60 s real-time session with Silero + Parakeet Ultra, printing CPU and memory.
 /// MEETY_PERF=1 swift test -c release --filter SessionPerformance
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["MEETY_PERF"] == "1"))
