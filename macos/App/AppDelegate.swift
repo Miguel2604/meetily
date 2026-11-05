@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         DebugSnapshot.scheduleIfRequested { [weak self] in self?.settingsWindow?.window ?? self?.onboarding?.window ?? main.window?.attachedSheet ?? main.window }
         if DemoRecording.isRequested { Task { await model.startRecording() } }
+        if let frames = ProcessInfo.processInfo.environment["MEETY_DICTATION_PILL"] { model.dictation.runPillDemo(frames: frames) }
         if let id = ProcessInfo.processInfo.environment["MEETY_OPEN_MEETING"] { model.route = .meeting(id) }
         if let path = ProcessInfo.processInfo.environment["MEETY_IMPORT"] { main.importFile(URL(fileURLWithPath: path)) }
         if let tab = ProcessInfo.processInfo.environment["MEETY_SETTINGS_TAB"].flatMap(Int.init).flatMap(SettingsWindowController.Tab.init) {

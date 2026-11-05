@@ -8,6 +8,7 @@ final class DictationPane: SettingsPane, NSTextViewDelegate, NSTextFieldDelegate
     private let model: AppModel
     private lazy var enabled = Self.checkbox("Dictate into any app", false, target: self, action: #selector(enabledChosen(_:)))
     private let holdKey = NSPopUpButton()
+    private lazy var soundsBox = Self.checkbox("Play a sound when it starts and stops", true, target: self, action: #selector(soundsChosen(_:)))
     private lazy var keepHistory = Self.checkbox("Keep my dictations for seven days", false, target: self, action: #selector(historyChosen(_:)))
     private var historyWindow: DictationHistoryWindowController?
     private let cleanup = NSPopUpButton()
@@ -66,7 +67,7 @@ final class DictationPane: SettingsPane, NSTextViewDelegate, NSTextFieldDelegate
         modelForm = form([("Provider", provider), ("Model", modelBox), ("API key", key)])
         let accessRow = NSStackView(views: [access, grant])
         accessRow.spacing = 8
-        section("Push to talk", [form([("Dictation", enabled), ("Hold to talk", holdKey), ("Accessibility", accessRow)])],
+        section("Push to talk", [form([("Dictation", enabled), ("Hold to talk", holdKey), ("Sounds", soundsBox), ("Accessibility", accessRow)])],
                 note: "Hold the key, speak, and let go: the text is pasted where you are typing. Double-tap it to keep listening hands-free, then press it once to finish. ⌥⇧V pastes the last dictation again. Meety needs Accessibility access to notice the key in other apps and to paste. Dictation uses the language set in General and the model set in Transcription, and pauses while a meeting records. If you pick Fn, set “Press 🌐 key to” to Do Nothing in System Settings › Keyboard.")
         section("Cleanup", [form([("Tidy the text with", cleanup)]), modelForm],
                 note: "Fixes punctuation and capitalization, drops filler words and false starts, and keeps the language you spoke. If cleanup fails or takes more than 5 seconds, the text is pasted as heard. Apple Intelligence needs to be on in System Settings and doesn't support every language; a fast hosted model such as Claude Haiku or Mercury on OpenRouter does.")
@@ -101,6 +102,7 @@ final class DictationPane: SettingsPane, NSTextViewDelegate, NSTextFieldDelegate
             let settings = model.settings
             enabled.state = settings.dictationEnabled ? .on : .off
             keepHistory.state = settings.dictationHistory ? .on : .off
+            soundsBox.state = settings.dictationSounds ? .on : .off
             holdKey.selectItem(at: DictationKey.allCases.firstIndex(of: DictationKey(saved: settings.dictationKey)) ?? 0)
             cleanup.selectItem(at: Self.modes.firstIndex { $0.0.rawValue == settings.dictationCleanup } ?? 0)
             provider.selectItem(at: Self.providers.firstIndex { $0.0.rawValue == settings.dictationProvider } ?? 0)
@@ -246,6 +248,8 @@ final class DictationPane: SettingsPane, NSTextViewDelegate, NSTextFieldDelegate
         model.settings.dictationEnabled = sender.state == .on
         if sender.state == .on, !model.dictation.accessibilityGranted { model.dictation.requestAccessibility() }
     }
+
+    @objc private func soundsChosen(_ sender: NSButton) { model.settings.dictationSounds = sender.state == .on }
 
     @objc private func historyChosen(_ sender: NSButton) { model.settings.dictationHistory = sender.state == .on }
 

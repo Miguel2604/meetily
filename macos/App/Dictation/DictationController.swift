@@ -15,6 +15,9 @@ final class DictationController {
 
     @ObservationIgnored private let model: AppModel
     @ObservationIgnored private let overlay = DictationOverlay()
+    @ObservationIgnored private let sounds = DictationSoundPlayer()
+    @ObservationIgnored private var lastPhase = Dictation.Phase.idle
+    @ObservationIgnored private var reveal: Task<Void, Never>?
     @ObservationIgnored private var ptt = PushToTalk()
     @ObservationIgnored private var monitors: [Any] = []
     @ObservationIgnored private var monitorsTrusted = false
@@ -47,10 +50,40 @@ final class DictationController {
         self.model = model
         track { [weak self] in self?.refresh() }
         Task { [store = model.store] in try? await store.pruneDictations() }
+        overlay.level = { [weak self] in self?.dictation.level ?? 0 }
         track { [weak self] in
             guard let self else { return }
-            overlay.show(dictation.phase, finishKey: ptt.isLocked ? key.symbol : nil)
+            phaseChanged(dictation.phase)
         }
+    }
+
+    private func phaseChanged(_ phase: Dictation.Phase) {
+        defer { lastPhase = phase }
+        guard phase != .listening else {
+            guard lastPhase != .listening else { return }
+            // Starting the microphone blocks this actor, so the key of a shortcut (⌥E) is queued behind it. A moment's
+            // grace lets that cancel first, and neither the pill nor the sound shows for a keyboard shortcut.
+            reveal?.cancel()
+            reveal = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(30))
+                guard !Task.isCancelled, let self else { return }
+                overlay.show(.listening, finishKey: ptt.isLocked ? key.symbol : nil)
+                play(ptt.isLocked ? .lock : .start)
+            }
+            return
+        }
+        reveal?.cancel()
+        if lastPhase == .listening, phase != .idle { play(.stop) }
+        overlay.show(phase, finishKey: nil)
+    }
+
+    private func play(_ cue: DictationCue) {
+        if model.settings.dictationSounds { sounds.play(cue) }
+    }
+
+    private func fail(_ message: String) {
+        overlay.flash(message)
+        play(.failed)
     }
 
     private func deliver(_ text: String) {
@@ -70,7 +103,10 @@ final class DictationController {
     }
 
     private func paste(_ text: String) {
-        if !Paste.insert(text) { overlay.flash("Copied. Press ⌘V, or allow Accessibility in Settings › Dictation to paste") }
+        guard Paste.insert(text) else { return fail("Copied. Press ⌘V, or allow Accessibility") }
+        guard dictation.phase != .listening else { return } // the next dictation has the pill and the quiet
+        overlay.confirm()
+        play(.done)
     }
 
     /// ⌥⇧V, as a Carbon hot key: it needs no permission and the V never reaches the app in front.
@@ -88,6 +124,37 @@ final class DictationController {
     func requestAccessibility() {
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
+
+    #if DEBUG
+    /// `MEETY_DICTATION_PILL=<dir>`: every pill state once, with a fake voice and no microphone, writing frames of the pill's
+    /// own window (never the rest of the screen) to the directory, then quits.
+    func runPillDemo(frames: String) {
+        overlay.level = { Float(0.002 + 0.09 * pow(0.5 + 0.5 * sin(CACurrentMediaTime() * 5.3), 2) * (0.5 + 0.5 * sin(CACurrentMediaTime() * 1.7))) }
+        Task {
+            let pause = { (seconds: Double) in try? await Task.sleep(for: .seconds(seconds)) }
+            await pause(0.5)
+            overlay.show(.listening, finishKey: nil)
+            let number = overlay.debugWindowNumber
+            Task.detached {
+                for index in 0..<400 {
+                    let capture = Process()
+                    capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                    capture.arguments = ["-x", "-o", "-l\(number)", String(format: "\(frames)/f-%04d.png", index)]
+                    try? capture.run()
+                    capture.waitUntilExit()
+                }
+            }
+            await pause(1.5)
+            overlay.show(.transcribing, finishKey: nil); await pause(0.8)
+            overlay.show(.cleaning, finishKey: nil); await pause(1.2)
+            overlay.confirm(); await pause(1.2)
+            overlay.show(.listening, finishKey: key.symbol); await pause(1.2)
+            overlay.show(.cleaning, finishKey: nil); await pause(0.8)
+            overlay.flash("Copied. Press ⌘V, or allow Accessibility"); await pause(3.4)
+            exit(0)
+        }
+    }
+    #endif
 
     private var key: DictationKey { DictationKey(saved: model.settings.dictationKey) }
 
@@ -147,7 +214,7 @@ final class DictationController {
             if dictation.phase != .listening { ptt = PushToTalk(key: key) } // it didn't start, so don't wait for a finishing press
         case .finish:
             Task {
-                do { try await dictation.finish() } catch { overlay.flash("Dictation failed: \(error)") }
+                do { try await dictation.finish() } catch { fail("Dictation failed: \(error)") }
             }
         case .cancel: dictation.discard()
         case nil: break
@@ -155,13 +222,13 @@ final class DictationController {
     }
 
     private func start() {
-        guard !model.recorder.isActive else { return overlay.flash("Dictation is off while a meeting records") }
+        guard !model.recorder.isActive else { return fail("Dictation is off while a meeting records") }
         guard MicrophonePermission.isGranted else {
             if MicrophonePermission.isUndetermined { Task { _ = await MicrophonePermission.request() } }
-            else { overlay.flash("Allow Meety in System Settings › Privacy & Security › Microphone") }
+            else { fail("Allow Meety in System Settings › Privacy & Security › Microphone") }
             return
         }
-        do { try dictation.start() } catch { overlay.flash("Microphone failed to start: \(error)") }
+        do { try dictation.start() } catch { fail("Microphone failed to start: \(error)") }
     }
 
     private func clean(_ heard: String) async -> String {
@@ -277,67 +344,14 @@ enum Paste {
     }
 }
 
-/// A small glass pill at the bottom of the screen: listening, transcribing, cleaning, or a short error.
-/// It never takes focus, so the text lands in the app the user is typing in.
-final class DictationOverlay {
-    private let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
-    private let icon = NSImageView()
-    private let label: NSTextField = { // one line: a wrapping label has no fitting width, so the pill collapses
-        let label = NSTextField(labelWithString: "")
-        label.font = Typography.bodyMedium
-        label.lineBreakMode = .byTruncatingTail
-        label.widthAnchor.constraint(lessThanOrEqualToConstant: 480).isActive = true
-        return label
-    }()
-    private lazy var glass = NSGlassEffectView(wrapping: row, inset: NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 18), cornerRadius: 21)
-    private lazy var row = NSStackView(views: [icon, label])
-    private var flashing: Task<Void, Never>?
+/// Dictation's sounds, loaded ahead of time so they play on the event.
+final class DictationSoundPlayer {
+    private let sounds: [DictationCue: NSSound] = Dictionary(uniqueKeysWithValues: DictationCue.allCases.compactMap { cue in
+        NSSound(data: DictationSounds.wav(DictationSounds.samples(cue))).map { (cue, $0) }
+    })
 
-    init() {
-        row.spacing = 8
-        icon.symbolConfiguration = .init(pointSize: 15, weight: .semibold)
-        panel.isFloatingPanel = true
-        panel.level = .statusBar
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.contentView = glass
-    }
-
-    func show(_ phase: Dictation.Phase, finishKey: String?) {
-        switch phase {
-        case .idle: if flashing == nil { panel.orderOut(nil) }
-        case .listening: present("mic.fill", .systemRed, finishKey.map { "Listening. Press \($0) again to finish" } ?? "Listening…")
-        case .transcribing: present("waveform", .secondaryLabelColor, "Transcribing…")
-        case .cleaning: present("sparkles", .secondaryLabelColor, "Tidying up…")
-        }
-    }
-
-    func flash(_ message: String) {
-        Logger(subsystem: "com.meetily.ai", category: "dictation").notice("Dictation pill: \(message, privacy: .public)")
-        present("exclamationmark.triangle.fill", .systemOrange, message)
-        flashing = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled, let self else { return }
-            flashing = nil
-            panel.orderOut(nil)
-        }
-    }
-
-    private func present(_ symbol: String, _ color: NSColor, _ text: String) {
-        flashing?.cancel()
-        flashing = nil
-        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        icon.contentTintColor = color
-        label.stringValue = text
-        panel.setContentSize(glass.fittingSize)
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        if let area = screen?.visibleFrame {
-            panel.setFrameOrigin(NSPoint(x: area.midX - panel.frame.width / 2, y: area.minY + 40))
-        }
-        panel.orderFrontRegardless()
+    func play(_ cue: DictationCue) {
+        sounds[cue]?.stop()
+        sounds[cue]?.play()
     }
 }

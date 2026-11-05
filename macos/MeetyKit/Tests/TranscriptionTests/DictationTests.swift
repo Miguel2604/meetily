@@ -127,6 +127,47 @@ import Testing
     }
 }
 
+/// Off the main actor: these crunch long buffers, which would stall the timing tests that share it.
+@Suite struct DictationAudioTests {
+    @Test func `a long pause keeps only its ends, and everything else stays`() {
+        let rate = 48_000.0
+        func seconds(_ samples: [Float]) -> Double { Double(samples.count) / rate }
+        let speech = tone(1, rate: rate)
+        let room = (0..<Int(10 * rate)).map { i in 0.002 * Float(sin(Double(i) * 0.37)) } // steady -57 dBFS room noise
+        let digital = silence(10, rate: rate)
+        for pause in [room, digital] {
+            let capped = Dictation.cappingPauses(speech + pause + speech, rate: rate)
+            #expect(abs(seconds(capped) - 4.8) < 0.1)
+        }
+        let trailing = Dictation.cappingPauses(speech + digital, rate: rate)
+        #expect(abs(seconds(trailing) - 3.5) < 0.1)
+        let short = speech + silence(2, rate: rate) + speech
+        #expect(Dictation.cappingPauses(short, rate: rate).count == short.count)
+        #expect(Dictation.cappingPauses(speech, rate: rate).count == speech.count)
+        #expect(Dictation.cappingPauses(digital, rate: rate).count == digital.count) // nothing heard: untouched
+        #expect(Dictation.cappingPauses([], rate: rate).isEmpty)
+    }
+
+    @Test func `only the loudest moment decides whether a capture is silent`() {
+        let rate = 48_000.0
+        #expect(Dictation.isSilent([], rate: rate))
+        #expect(Dictation.isSilent(silence(1, rate: rate), rate: rate))
+        #expect(Dictation.isSilent(silence(1, rate: rate).map { $0 + 0.2 }, rate: rate))
+        #expect(!Dictation.isSilent(silence(2, rate: rate) + tone(0.1, rate: rate) + silence(2, rate: rate), rate: rate))
+        #expect(!Dictation.isSilent(tone(1, rate: rate).map { $0 * 0.05 }, rate: rate)) // a quiet mic still counts
+    }
+
+    @Test func `start and stop sounds the microphone hears don't make an empty hold count as speech`() {
+        let rate = 48_000.0, tail = Duration.milliseconds(200)
+        let cue = tone(0.1, rate: rate), quiet = silence(1, rate: rate)
+        #expect(Dictation.heardNothing(cue + quiet + cue, rate: rate, tail: tail))
+        #expect(!Dictation.heardNothing(cue + quiet + tone(0.3, rate: rate) + quiet + cue, rate: rate, tail: tail))
+        // Too short to skip anything: it goes to the model rather than risk dropping a quick word.
+        #expect(!Dictation.heardNothing(tone(0.2, rate: rate), rate: rate, tail: tail))
+        #expect(Dictation.heardNothing(silence(0.2, rate: rate), rate: rate, tail: tail))
+    }
+}
+
 @MainActor @Suite struct DictationTests {
     final class Delivered { var texts: [String] = [] }
 
@@ -203,32 +244,30 @@ import Testing
         #expect(d.phase == .idle)
     }
 
-    @Test func `only the loudest moment decides whether a capture is silent`() {
-        let rate = 48_000.0
-        #expect(Dictation.isSilent([], rate: rate))
-        #expect(Dictation.isSilent(silence(1, rate: rate), rate: rate))
-        #expect(Dictation.isSilent(silence(1, rate: rate).map { $0 + 0.2 }, rate: rate))
-        #expect(!Dictation.isSilent(silence(2, rate: rate) + tone(0.1, rate: rate) + silence(2, rate: rate), rate: rate))
-        #expect(!Dictation.isSilent(tone(1, rate: rate).map { $0 * 0.05 }, rate: rate)) // a quiet mic still counts
+    @Test func `the pill leaves listening on release, while the tail still captures`() async throws {
+        let mic = LiveMic(level: 0.001)
+        let d = Dictation(capture: { mic }, engine: { FakeEngine() }, clean: { $0 }, deliver: { _ in })
+        d.tail = .milliseconds(100)
+        try d.start()
+        #expect(d.phase == .listening)
+        async let finished = d.finish()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(mic.stopped.withLock { $0 } == nil)
+        #expect(d.phase == .transcribing)
+        _ = try await finished
     }
 
-    @Test func `a long pause keeps only its ends, and everything else stays`() {
-        let rate = 48_000.0
-        func seconds(_ samples: [Float]) -> Double { Double(samples.count) / rate }
-        let speech = tone(1, rate: rate)
-        let room = (0..<Int(10 * rate)).map { i in 0.002 * Float(sin(Double(i) * 0.37)) } // steady -57 dBFS room noise
-        let digital = silence(10, rate: rate)
-        for pause in [room, digital] {
-            let capped = Dictation.cappingPauses(speech + pause + speech, rate: rate)
-            #expect(abs(seconds(capped) - 4.8) < 0.1)
-        }
-        let trailing = Dictation.cappingPauses(speech + digital, rate: rate)
-        #expect(abs(seconds(trailing) - 3.5) < 0.1)
-        let short = speech + silence(2, rate: rate) + speech
-        #expect(Dictation.cappingPauses(short, rate: rate).count == short.count)
-        #expect(Dictation.cappingPauses(speech, rate: rate).count == speech.count)
-        #expect(Dictation.cappingPauses(digital, rate: rate).count == digital.count) // nothing heard: untouched
-        #expect(Dictation.cappingPauses([], rate: rate).isEmpty)
+    @Test func `the level follows the microphone while listening`() async throws {
+        let mic = LiveMic(level: 1)
+        let d = Dictation(capture: { mic }, engine: { FakeEngine() }, clean: { $0 }, deliver: { _ in })
+        d.tail = .zero
+        #expect(d.level == 0)
+        try d.start()
+        let deadline = ContinuousClock.now + .seconds(2)
+        while d.level == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(d.level > 0.1)
+        _ = try await d.finish()
+        #expect(d.level == 0)
     }
 
     @Test func `a second start while listening is ignored`() async throws {

@@ -30,6 +30,7 @@ public final class Settings {
     /// The `Provider` raw value and model name for the dictationModel cleanup; its key is the provider's Keychain entry.
     public var dictationProvider: String { didSet { defaults.set(dictationProvider, forKey: "dictationProvider") } }
     public var dictationModel: String { didSet { defaults.set(dictationModel, forKey: "dictationModel") } }
+    public var dictationSounds: Bool { didSet { defaults.set(dictationSounds, forKey: "dictationSounds") } }
     /// Keep pasted dictations in the database for seven days. Off by default: dictated text stays out of files unless asked.
     public var dictationHistory: Bool { didSet { defaults.set(dictationHistory, forKey: "dictationHistory") } }
     /// How cleanup should write for particular apps.
@@ -65,6 +66,7 @@ public final class Settings {
         dictationCleanup = defaults.string(forKey: "dictationCleanup") ?? "onDevice"
         dictationProvider = defaults.string(forKey: "dictationProvider") ?? "claude"
         dictationModel = defaults.string(forKey: "dictationModel") ?? ""
+        dictationSounds = defaults.object(forKey: "dictationSounds") as? Bool ?? true
         dictationHistory = defaults.bool(forKey: "dictationHistory")
         dictationAppPrompts = defaults.data(forKey: "dictationAppPrompts").flatMap { try? JSONDecoder().decode([DictationAppPrompt].self, from: $0) } ?? []
         dictationKey = defaults.string(forKey: "dictationKey") ?? "rightOption"
